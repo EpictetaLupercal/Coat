@@ -1,8 +1,12 @@
-# Coat 1.0.5
+Coat 1.0.5
 
 2D level-design plan and blueprint editor — **Epicteta Lupercal**.
 
-Download **Coat-1.0.5-Windows-x64.zip** from this repository's **Releases** section. Extract the entire ZIP, then launch **Coat.exe**. Keep the accompanying files alongside the executable. GitHub's automatically generated source-code archives contain the sources; use the Windows release ZIP to run the application.
+## Download
+
+**[Download Coat 1.0.5 for Windows (x64)](https://github.com/EpictetaLupercal/Coat/raw/refs/heads/main/Coat-1.0.5-Windows-x64.zip)**
+
+Extract the entire ZIP, then launch **Coat.exe**. Keep the accompanying files alongside the executable. Use the download link above for the ready-to-run Windows application.
 
 Coat requires **Windows 10 or 11 (x64)** and **[.NET Desktop Runtime 8 (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)**. On the download page, choose **.NET Desktop Runtime → Windows → x64**. The runtime is not bundled.
 
@@ -43,3 +47,4 @@ The interface defaults to **English**. French is available under **Edit → Pref
 `.coat` projects use JSON format 6, supported since Coat 1.0.2. This update retains the existing project format.
 
 See the [publishing checklist](docs/PUBLISHING.md) before uploading the project to GitHub. Generated applications, packages, test artifacts, and local caches are excluded from the source repository by `.gitignore`.
+
