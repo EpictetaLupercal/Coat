@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Coat</AssemblyName>
+    <RootNamespace>Coat</RootNamespace>
+    <Version>1.0.5</Version>
+    <Authors>Epicteta Lupercal</Authors>
+    <Company>Epicteta Lupercal</Company>
+    <Copyright>Epicteta Lupercal</Copyright>
+    <Description>Coat — 2D level design plan and blueprint editor by Epicteta Lupercal</Description>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup><EmbeddedResource Include="Locales/en.json" /></ItemGroup>
+</Project>
