@@ -38,9 +38,9 @@ PNG and SVG include tokens, gradients and arrows. These are drawing decorations:
 
 ## Download
 
-**[Download Coat 1.0.5 for Windows (x64)](https://github.com/EpictetaLupercal/Coat/raw/refs/heads/main/Coat-1.0.5-Windows-x64.zip)**
+**[Download Coat 1.1.0 for Windows (x64)](https://github.com/EpictetaLupercal/Coat/releases/download/v1.1.0/Coat-1.1.0-Windows-x64.zip)**
 
-The link above is the published **1.0.5** build. This source tree contains **1.1.0**; build it locally or upload the new package and update this link when publishing.
+The link above is the published **1.1.0** build. This source tree contains **1.1.0**; build it locally or upload the new package and update this link when publishing.
 
 Extract the entire ZIP, then launch **Coat.exe**. Keep the accompanying files alongside the executable. Use the download link above for the ready-to-run Windows application.
 
