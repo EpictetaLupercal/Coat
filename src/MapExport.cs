@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -30,7 +30,7 @@ public partial class Plan
 public enum MapSurface { Empty, Wall, Floor }
 public record MapBrush(int Level, double Bottom, double Top, List<V2> Outline, MapSurface Surface = MapSurface.Wall);
 public sealed record MapExportResult(string Text, int BrushCount);
-public static class MapExporter
+public static partial class MapExporter
 {
     public const double FloorThickness = 16;
     private record Region(Face Face, List<V2> Points, MapSurface Surface);
@@ -43,6 +43,7 @@ public static class MapExporter
         plan.ValidateMapSettings();
         var vertices = plan.Vertices.ToDictionary(v => v.Id, v => v.P);
         var faces = plan.Faces(); var brushes = new List<MapBrush>();
+        var contours = new ContourRegions(faces, vertices);
         var wallColor = ColorMath.Hex(ParseColor(plan.WallColor));
         foreach (var level in plan.Levels.Order())
         {
@@ -53,6 +54,17 @@ public static class MapExporter
             double bottom = plan.LevelZ(level), top = plan.WallTop(level);
             if (regions.Any(r => r.Surface == MapSurface.Wall) && (!double.IsFinite(top) || top <= bottom + 1e-6))
                 throw new InvalidDataException(L.F($"Niveau {level} : le haut du mur ({top:0.###}) doit être supérieur à sa base ({bottom:0.###}). Corrigez les hauteurs Z des niveaux."));
+            // Convex source contours with no enclosed face bypass the slab decomposition.
+            // Their vertices already include all editor transforms, including ellipse scaling.
+            var direct = new HashSet<string>();
+            foreach (var region in regions.Where(r => r.Surface != MapSurface.Empty && contours.Holes[r.Face.Key].Count == 0))
+            {
+                var outline = Clean(region.Points.ToList());
+                if (!Convex(outline)) continue;
+                direct.Add(region.Face.Key);
+                brushes.Add(region.Surface == MapSurface.Wall ? new(level, bottom, top, outline, region.Surface) : new(level, bottom - FloorThickness, bottom, outline, region.Surface));
+            }
+            if (regions.All(r => r.Surface == MapSurface.Empty || direct.Contains(r.Face.Key))) continue;
             // Horizontal slabs yield rectangles for orthogonal contours and convex trapezoids for diagonals.
             // Even/odd crossings also handle repeated bridge edges, concavity and enclosed openings.
             var ys = regions.SelectMany(r => r.Points.Select(p => p.Y)).Distinct().Order().ToArray();
@@ -82,7 +94,7 @@ public static class MapExporter
                     while (j < crossings.Count && Math.Abs(crossings[j].X - boundary.X) < 1e-8);
                     // The innermost face owns the cell: empty faces cut holes; color chooses wall or floor.
                     int owner = inside.OrderBy(r => regions[r].Face.Area).ThenBy(r => r).DefaultIfEmpty(-1).First();
-                    var next = owner >= 0 && j < crossings.Count ? regions[owner].Surface : MapSurface.Empty;
+                    var next = owner >= 0 && j < crossings.Count && !direct.Contains(regions[owner].Face.Key) ? regions[owner].Surface : MapSurface.Empty;
                     if (next != current && start != null)
                     {
                         var outline = Clean(new() { new(start.At(y0), y0), new(boundary.At(y0), y0), new(boundary.At(y1), y1), new(start.At(y1), y1) });
@@ -111,18 +123,10 @@ public static class MapExporter
             }
         }
         if (brushes.Count == 0) throw new InvalidDataException(L.T("Aucun volume à exporter. Remplissez une zone fermée : couleur des murs pour un mur, autre couleur pour un sol. Les zones sans remplissage ne créent aucun objet."));
-        return brushes;
+        return MergeConvex(brushes);
     }
     private static System.Windows.Media.Color ParseColor(string value)
     { ColorMath.TryHex(value, out var color); return color; }
-    internal static double Area(IReadOnlyList<V2> points)
-    { double area = 0; for (int i = 0; i < points.Count; i++) area += V2.Cross(points[i], points[(i + 1) % points.Count]); return area / 2; }
-    private static List<V2> Clean(List<V2> points)
-    {
-        for (int i = points.Count - 1; i >= 0 && points.Count > 1; i--)
-            if ((points[i] - points[(i + 1) % points.Count]).Length < 1e-8) points.RemoveAt(i);
-        return points;
-    }
     public static MapExportResult Export(Plan plan)
     {
         var brushes = Build(plan);
@@ -157,11 +161,12 @@ public partial class MainWindow
         DockPanel.SetDock(label, Dock.Left); row.Children.Add(label);
         var input = new TextBox { Text = Document.LevelZ(Document.ActiveLevel).ToString("0.#########", CultureInfo.InvariantCulture), MinWidth = 55 };
         AutomationProperties.SetName(input, L.T("Hauteur du niveau"));
-        var apply = Button(L.T("Appliquer la hauteur"), () =>
+        NumericInput(input);
+        var apply = ConfirmButton(L.T("Appliquer la hauteur"), () =>
         {
-            if (double.TryParse(input.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var z)) SetLevelHeight(z);
+            if (NumericExpression.TryEvaluate(input.Text, out var z)) SetLevelHeight(z);
             else { Notify(L.T("Saisissez une coordonnée numérique valide.")); input.Focus(); input.SelectAll(); }
-        });
+        }, input);
         apply.FontSize = 11; apply.Padding = new Thickness(5); apply.Margin = new Thickness(5, 0, 0, 0); DockPanel.SetDock(apply, Dock.Right); row.Children.Add(apply); row.Children.Add(input); levelsPanel.Children.Add(row);
         levelsPanel.Children.Add(new TextBlock { Text = L.F($"Haut des murs : {Document.WallTop(Document.ActiveLevel):0.###} u"), FontSize = 10, Foreground = B("#96A7BC"), Margin = new Thickness(0, 5, 0, 0) });
     }

@@ -79,9 +79,9 @@ internal static class Update06Tests
         string prefs = Path.Combine(output, "legacy-preferences-06.json"); File.WriteAllText(prefs, JsonSerializer.Serialize(settings.Bindings));
         settings = ShortcutSettings.Load(prefs);
         check(settings.Bindings["Dessin"] == new Shortcut(Key.H, ModifierKeys.None) && settings.Bindings["Niveaux supérieurs visibles"] != settings.Bindings["Dessin"] && settings.Bindings.ContainsKey("Coller"), "Preference upgrade preserves custom bindings and resolves new shortcut conflicts");
-        window.Shortcuts = new(); Load(Square()); canvas.SelectAll(); window.Shortcuts.Bindings["Copier"] = new(Key.F6, ModifierKeys.None);
+        window.Shortcuts = new() { Bindings = ShortcutSettings.ErgonomicBindings() }; Load(Square()); canvas.SelectAll(); window.Shortcuts.Bindings["Copier"] = new(Key.F6, ModifierKeys.None);
         var key = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window)!, 0, Key.F6) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
-        clipboard.Data = null; window.RaiseEvent(key); check(clipboard.Data != null && key.Handled, "Remapped Copy dispatches through the normal keyboard handler"); window.Shortcuts = new();
+        clipboard.Data = null; window.RaiseEvent(key); check(clipboard.Data != null && key.Handled, "Remapped Copy dispatches through the normal keyboard handler"); window.Shortcuts = new() { Bindings = ShortcutSettings.ErgonomicBindings() };
         var layered = Square(); layered.ActiveLevel = 1;
         layered.Polygon(new V2[] { new(192, 0), new(320, 0), new(320, 128), new(192, 128) }); layered.Fills[layered.Faces().Single(f => f.Level == 1).Key] = "#FFFFFF";
         layered.Annotations.Add(new Annotation { Id = layered.NextId++, Level = 1, X = 208, Y = 100, Text = "Hidden text" }); layered.ActiveLevel = 0;

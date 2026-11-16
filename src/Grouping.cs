@@ -22,11 +22,12 @@ public partial class Plan
         }
         Groups.RemoveAll(g => g.VertexIds.Count + g.EdgeIds.Count == 0);
     }
-    public HashSet<int> GroupPoints(GeometryGroup group) => group.VertexIds.Concat(Edges.Where(e => group.EdgeIds.Contains(e.Id)).SelectMany(e => new[] { e.A, e.B })).ToHashSet();
+    public HashSet<int> GroupPoints(GeometryGroup group) { var edges = group.EdgeIds.ToHashSet(); return group.VertexIds.Concat(Edges.Where(e => edges.Contains(e.Id)).SelectMany(e => new[] { e.A, e.B })).ToHashSet(); }
     public List<GeometryGroup> MatchingGroups(IEnumerable<int> vertices, IEnumerable<int> edges)
     {
         var v = vertices.ToHashSet(); var e = edges.ToHashSet();
-        return Groups.Where(g => GroupPoints(g).Overlaps(v) || g.EdgeIds.Any(e.Contains)).ToList();
+        var edgeIndex = Edges.ToDictionary(edge => edge.Id);
+        return Groups.Where(g => g.VertexIds.Any(v.Contains) || g.EdgeIds.Any(id => e.Contains(id) || edgeIndex.TryGetValue(id, out var edge) && (v.Contains(edge.A) || v.Contains(edge.B)))).ToList();
     }
     public GeometryGroup? GroupSelection(IEnumerable<int> vertices, IEnumerable<int> edges)
     {

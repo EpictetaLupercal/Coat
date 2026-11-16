@@ -14,6 +14,7 @@ internal static class Program
         string source = File.ReadAllText(args[0]);
         string output = Path.GetFullPath(args[1]); Directory.CreateDirectory(output);
         var input = Plan.Parse(source);
+        if (args.Contains("--navigation")) { Navigation(input, output, args.Contains("--stress")); return; }
         var measurements = new Dictionary<string, double[]>();
         var operations = new Dictionary<string, Action<Plan>>
         {
@@ -54,4 +55,38 @@ internal static class Program
         Console.WriteLine($"Vertices: {input.Vertices.Count}; edges: {input.Edges.Count}; levels: {string.Join(",",input.Levels)}");
     }
     static void Pump() { var f = new DispatcherFrame(); Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => f.Continue = false)); Dispatcher.PushFrame(f); }
+    static void Navigation(Plan plan, string output, bool stress)
+    {
+        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var window = new MainWindow { TestMode = true, ShowInTaskbar = false, Width = 1440, Height = 900 };
+        window.Show(); window.UpdateLayout(); window.LoadDocument(plan, ""); window.Canvas.Fit(); Pump();
+        var samples = new Dictionary<string, double[]>();
+        foreach (bool lengths in new[] { false, true })
+        {
+            window.Canvas.ShowLengths = lengths; var times = new List<double>();
+            for (int i = 0; i < (stress ? 63 : 15); i++)
+            {
+                var watch = Stopwatch.StartNew(); window.Canvas.Center += stress ? new V2(110, 55) * (i / 12 % 2 == 0 ? 1 : -1) : new V2(12, 6);
+                window.Canvas.InvalidateVisual(); Pump(); watch.Stop(); if (stress && i % 12 == 0) Console.WriteLine($"pan lengths={lengths}, frame={i}: {watch.Elapsed.TotalMilliseconds:F2} ms"); if (i >= 3) times.Add(watch.Elapsed.TotalMilliseconds);
+            }
+            samples[lengths ? "pan_lengths" : "pan"] = times.ToArray();
+        }
+        if (stress)
+        {
+            var edits = new List<double>(); var zoom = new List<double>();
+            for (int i = 0; i < 8; i++)
+            {
+                var watch = Stopwatch.StartNew(); window.Canvas.Zoom *= i % 2 == 0 ? 1.1 : 1 / 1.1; window.Canvas.InvalidateVisual(); Pump(); watch.Stop();
+                zoom.Add(watch.Elapsed.TotalMilliseconds);
+                Console.WriteLine($"zoom {i}: {watch.Elapsed.TotalMilliseconds:F2} ms");
+                var copy = Plan.Parse(plan.Serialize()); watch.Restart(); copy.Segment(new(-128 - i * 32, -128), new(256, 256)); watch.Stop(); edits.Add(watch.Elapsed.TotalMilliseconds); Console.WriteLine($"segment {i}: {watch.Elapsed.TotalMilliseconds:F2} ms");
+            }
+            samples["zoom"] = zoom.ToArray(); samples["add_segment"] = edits.ToArray();
+        }
+        var refresh = Stopwatch.StartNew(); window.Canvas.RefreshGeometry(); refresh.Stop(); samples["refresh"] = new[] { refresh.Elapsed.TotalMilliseconds };
+        File.WriteAllText(Path.Combine(output, "navigation.json"), JsonSerializer.Serialize(samples, new JsonSerializerOptions { WriteIndented = true }));
+        foreach (var pair in samples) Console.WriteLine($"{pair.Key}: median {pair.Value.Order().ElementAt(pair.Value.Length / 2):F2} ms; p95 {pair.Value.Order().ElementAt((int)Math.Ceiling(pair.Value.Length * .95) - 1):F2} ms; max {pair.Value.Max():F2} ms");
+        Console.WriteLine($"Vertices: {plan.Vertices.Count}; edges: {plan.Edges.Count}; levels: {plan.Levels.Count}");
+        window.Close(); app.Shutdown();
+    }
 }

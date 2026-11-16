@@ -22,3 +22,15 @@ Measured medians on the development PC, seven repetitions after warm-up:
 | Add segment including UI refresh | 472.93 | 41.20 |
 
 All five resulting geometry files are byte-identical to the baseline, including IDs, fills, patterns, line styles, and groups. Raw results are in `artifacts/legacy-tests/perf-before` and `artifacts/legacy-tests/perf-after`. Timings depend on hardware and document geometry; pairwise candidate enumeration remains quadratic, so this is not a guarantee of constant-time editing on arbitrarily large plans.
+
+## Navigation probe (1.0.6)
+
+Run `Performance.exe <input.coat> <output-directory> --navigation` to measure panning with and without length labels. The probe discards three warm-up frames, records twelve frames for each case, and writes raw measurements to `navigation.json`. The elapsed time includes WPF dispatcher rendering, rather than just assigning camera coordinates.
+
+Add `--stress` for sixty measured frames with a longer back-and-forth path that crosses the navigation cache margin. This also measures zoom changes, segment creation on cloned plans, and render-geometry refresh. Output includes median, 95th percentile, and maximum times. Do not run other UI tests concurrently with performance measurements.
+
+The compositor-managed drawing cache is bounded to sixteen million pixels and renewed when it runs beyond its 256-DIP screen margin. Geometry edits, selection changes, zoom, window size, DPI, language, and display flags invalidate the relevant cache. PNG exports bypass the drawing-brush cache; SVG and .map continue to use document geometry. First-frame preparation and cache renewal cost more than steady panning.
+
+Vertex lookup and per-level render lists replace repeated linear scans. Normalization uses spatial buckets for coincident points, sorted per-level edge intervals for candidate intersections, and binary searches for split-point candidates. Dense intersecting geometry can still produce quadratic work; recursion alone would not reduce that complexity. Group expansion uses an indexed queue to visit reachable groups without repeated global scans.
+
+See [the 1.0.6 review](../../docs/PERFORMANCE-1.0.6.md) for measurements, limitations, and validation.

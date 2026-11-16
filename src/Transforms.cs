@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -27,14 +27,15 @@ public partial class EditorCanvas
     public TransformKind Transform { get; set; }
     private V2 transformPivot;
     private double transformAmount;
-    public V2 SelectionCenter => SelectionTransform.Center(SelectionPoints().Select(id => Plan.Get(id).P));
+    public V2 SelectionCenter => SelectionTransform.Center(SelectionPoints().Select(id => VertexAt(id).P));
     public void SetTransform(TransformKind transform) { CancelGesture(); Transform = transform; Host.UpdateInspector(); InvalidateVisual(); Focus(); }
     private void BeginTransformDrag()
     {
-        dragging = true; original = SelectionPoints().ToDictionary(id => id, id => Plan.Get(id).P); transformPivot = SelectionTransform.Center(original.Values); transformAmount = Transform == TransformKind.Scale ? 1 : 0;
+        scaleHandle = null; dragging = true; original = SelectionPoints().ToDictionary(id => id, id => VertexAt(id).P); transformPivot = SelectionTransform.Center(original.Values); transformAmount = Transform == TransformKind.Scale ? 1 : 0;
     }
     private void UpdateTransformDrag(bool shift)
     {
+        if (Transform == TransformKind.Scale && scaleHandle != null) { UpdateScaleHandle(shift); return; }
         var initial = downWorld - transformPivot; var current = mouseWorld - transformPivot;
         Func<V2, V2> map;
         if (Transform == TransformKind.Rotation)
@@ -47,10 +48,11 @@ public partial class EditorCanvas
         {
             double scale = initial.Length * Zoom < 10 ? Math.Exp((mouseScreen.X - downScreen.X - mouseScreen.Y + downScreen.Y) / 140) : current.Length / initial.Length;
             transformAmount = Math.Clamp(shift ? Math.Round(scale * 10) / 10 : scale, .01, 1000);
+            scaleFactorX = scaleFactorY = transformAmount;
             map = p => SelectionTransform.Scale(p, transformPivot, transformAmount, transformAmount);
         }
         var changes = original.ToDictionary(pair => pair.Key, pair => map(pair.Value));
-        if (changes.Values.All(SelectionTransform.Valid)) foreach (var pair in changes) Plan.Get(pair.Key).P = pair.Value;
+        if (changes.Values.All(SelectionTransform.Valid)) foreach (var pair in changes) VertexAt(pair.Key).P = pair.Value;
     }
     public void NormalizeSelection()
     {
@@ -61,6 +63,7 @@ public partial class EditorCanvas
     private void DrawTransformGuide(DrawingContext dc)
     {
         if (Tool != EditorTool.Select || Transform == TransformKind.Translation || SelectedAnnotation != null || SelectionPoints().Count == 0) return;
+        if (Transform == TransformKind.Scale) { DrawScaleHandles(dc); return; }
         var center = Screen(dragging ? transformPivot : SelectionCenter);
         var pen = new Pen(Accent, 1) { DashStyle = DashStyles.Dash };
         dc.DrawLine(pen, new(center.X - 10, center.Y), new(center.X + 10, center.Y)); dc.DrawLine(pen, new(center.X, center.Y - 10), new(center.X, center.Y + 10));
@@ -85,10 +88,11 @@ public partial class MainWindow
     private void TransformSelection(Func<V2, V2> transform)
     {
         Canvas.CancelGesture();
-        var changes = Canvas.SelectionPoints().ToDictionary(id => id, id => transform(Document.Get(id).P));
-        if (changes.Count == 0 || changes.All(pair => (Document.Get(pair.Key).P - pair.Value).Length < 1e-9)) return;
+        var vertices = Document.Vertices.ToDictionary(v => v.Id);
+        var changes = Canvas.SelectionPoints().ToDictionary(id => id, id => transform(vertices[id].P));
+        if (changes.Count == 0 || changes.All(pair => (vertices[pair.Key].P - pair.Value).Length < 1e-9)) return;
         if (!changes.Values.All(SelectionTransform.Valid)) { Notify(L.T("La transformation dépasse les limites du plan.")); return; }
-        Mutate(() => { foreach (var pair in changes) Document.Get(pair.Key).P = pair.Value; Canvas.NormalizeSelection(); }); Canvas.Focus();
+        Mutate(() => { foreach (var pair in changes) vertices[pair.Key].P = pair.Value; Canvas.NormalizeSelection(); }); Canvas.Focus();
     }
     private void TransformInspector()
     {
@@ -98,7 +102,7 @@ public partial class MainWindow
         for (int i = 0; i < 3; i++)
         {
             var mode = (TransformKind)i; var button = Button("", () => Canvas.SetTransform(mode));
-            var content = new StackPanel(); content.Children.Add(new Image { Source = TransformIcon(mode), Width = 28, Height = 28, Margin = new Thickness(0, 0, 0, 4) }); content.Children.Add(new TextBlock { Text = labels[i], HorizontalAlignment = HorizontalAlignment.Center, FontSize = 10 });
+            var content = new StackPanel(); content.Children.Add(new Image { Source = TransformIcon(mode), Width = 22, Height = 22, Margin = new Thickness(0, 0, 0, 4) }); content.Children.Add(new TextBlock { Text = labels[i], HorizontalAlignment = HorizontalAlignment.Center, FontSize = 10 });
             button.Content = content; button.Padding = new Thickness(3, 6, 3, 6); button.Margin = new Thickness(0, 0, i == 2 ? 0 : 4, 0); button.ToolTip = labels[i];
             System.Windows.Automation.AutomationProperties.SetName(button, labels[i]);
             if (Canvas.Transform == mode) { button.Background = B("#304E48"); button.BorderBrush = B("#78DCC1"); }
@@ -109,9 +113,9 @@ public partial class MainWindow
         if (!selected) { ToolHint(L.T("Sélectionnez des points, arêtes ou zones pour les transformer.")); return; }
         if (Canvas.Transform == TransformKind.Translation || Canvas.SelectedAnnotation != null)
         {
-            var dx = Field(L.T("Décalage X"), moveXText); var dy = Field(L.T("Décalage Y"), moveYText);
+            var (dx, dy) = AxisFields(L.T("Décalage"), moveXText, moveYText, L.T("Décalage X"), L.T("Décalage Y"));
             dx.TextChanged += (_, _) => moveXText = dx.Text; dy.TextChanged += (_, _) => moveYText = dy.Text;
-            inspector.Children.Add(Button(L.T("Déplacer la sélection"), () => { if (Number(dx, out var x) && Number(dy, out var y)) MoveSelection(x, y); }));
+            inspector.Children.Add(ConfirmButton(L.T("Déplacer la sélection"), () => { if (Number(dx, out var x) && Number(dy, out var y)) MoveSelection(x, y); }, dx, dy));
             if (Canvas.Mode == SelectionMode.Edge && Canvas.SelectedEdges.Count > 0)
             {
                 var ex = Button(L.T("Extruder avec ce décalage"), () => { if (Number(dx, out var x) && Number(dy, out var y)) Mutate(() => { var next = Document.Extrude(Canvas.SelectedEdges.ToArray(), new V2(x, y)); Canvas.SelectedEdges.Clear(); Canvas.SelectedEdges.UnionWith(next); }); }); ex.Margin = new Thickness(0, 7, 0, 0); inspector.Children.Add(ex);
@@ -120,17 +124,18 @@ public partial class MainWindow
         else if (Canvas.Transform == TransformKind.Rotation)
         {
             var angle = Field("Angle (°)", rotationText); angle.TextChanged += (_, _) => rotationText = angle.Text;
-            inspector.Children.Add(Button(L.T("Appliquer la rotation"), () => { if (Number(angle, out var value)) RotateSelection(value); }));
+            inspector.Children.Add(ConfirmButton(L.T("Appliquer la rotation"), () => { if (Number(angle, out var value)) RotateSelection(value); }, angle));
             ToolHint(L.T("\nPivot au centre de la sélection. Angle positif : sens antihoraire. Glissez pour tourner ; Maj règle le pas à 15°."));
         }
         else
         {
             var uniform = new CheckBox { Content = L.T("Échelle uniforme"), IsChecked = uniformScale }; uniform.Click += (_, _) => { uniformScale = uniform.IsChecked == true; UpdateInspector(); }; inspector.Children.Add(uniform);
-            var x = Field(uniformScale ? L.T("Facteur") : L.T("Facteur X"), scaleXText); x.TextChanged += (_, _) => scaleXText = x.Text;
-            TextBox? y = null;
-            if (!uniformScale) { y = Field(L.T("Facteur Y"), scaleYText); y.TextChanged += (_, _) => scaleYText = y.Text; }
-            inspector.Children.Add(Button(L.T("Appliquer l’échelle"), () => { if (!Number(x, out double sx)) return; double sy = sx; if (y != null && !Number(y, out sy)) return; ScaleSelection(sx, sy); }));
-            ToolHint(L.T("\n1 conserve la taille, 2 la double, 0,5 la divise par deux. Glissez pour une échelle uniforme autour du centre. Un facteur négatif crée un miroir."));
+            TextBox x; TextBox? y = null;
+            if (uniformScale) x = Field(L.T("Facteur"), scaleXText);
+            else { (x, y) = AxisFields(L.T("Facteur"), scaleXText, scaleYText, L.T("Facteur X"), L.T("Facteur Y")); y.TextChanged += (_, _) => scaleYText = y.Text; }
+            x.TextChanged += (_, _) => scaleXText = x.Text;
+            inspector.Children.Add(ConfirmButton(L.T("Appliquer l’échelle"), () => { if (!Number(x, out double sx)) return; double sy = sx; if (y != null && !Number(y, out sy)) return; ScaleSelection(sx, sy); }, y == null ? new[] { x } : new[] { x, y }));
+            ToolHint(L.T("Les poignées latérales redimensionnent un axe ; les coins redimensionnent X et Y. Maj sur un coin conserve les proportions. Le côté opposé reste fixe. Les facteurs numériques utilisent le centre ; un facteur négatif crée un miroir."));
         }
     }
     private static ImageSource TransformIcon(TransformKind kind)

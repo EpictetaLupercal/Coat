@@ -1,12 +1,12 @@
 # Coat — Epicteta Lupercal
-param([switch]$Package)
+param([switch]$Package, [string]$OutputDirectory = 'app')
 $ErrorActionPreference = 'Stop'
 $env:DOTNET_CLI_HOME = Join-Path $PSScriptRoot '.build'
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_CLI_UI_LANGUAGE = 'en'
 $project = Join-Path $PSScriptRoot 'src\Coat.csproj'
-$output = Join-Path $PSScriptRoot 'app'
+$output = Join-Path $PSScriptRoot $OutputDirectory
 dotnet publish $project -c Release --self-contained false -o $output -p:UseSharedCompilation=false
 if ($LASTEXITCODE -ne 0) { throw 'Coat build failed.' }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'docs\Guide-Francais.md') -Destination (Join-Path $output 'LISEZ-MOI.md') -Force

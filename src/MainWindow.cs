@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -31,7 +31,7 @@ public partial class MainWindow : Window
     private static Brush B(string c) => EditorCanvas.Brush(c);
     public MainWindow()
     {
-        Title = L.T("Coat — Sans titre"); Width = 1440; Height = 900; MinWidth = 1050; MinHeight = 680;
+        Title = AppVersion.Title; Width = 1440; Height = 900; MinWidth = 1050; MinHeight = 680;
         WindowStartupLocation = WindowStartupLocation.CenterScreen; Background = B("#141B25"); Foreground = B("#DCE4ED"); FontFamily = new FontFamily("Segoe UI"); FontSize = 13;
         SetTheme(); Icon = MakeIcon(); Canvas = new EditorCanvas(this); Language = XmlLanguage.GetLanguage(L.Culture.Name);
         BuildInterface();
@@ -45,21 +45,21 @@ public partial class MainWindow : Window
     {
         if (VisualTreeHelper.GetParent(Canvas) is Panel parent) parent.Children.Remove(Canvas);
         inspector = new(); levelsPanel = new() { Margin = new Thickness(20, 18, 20, 0) };
-        statusLeft = new(); statusRight = new(); gridChoice = new(); toolButtons.Clear(); shortcutMenus.Clear();
+        statusLeft = new(); statusRight = new(); gridChoice = new(); toolButtons.Clear(); shortcutMenus.Clear(); menuCommands.Clear(); featureMenus.Clear();
         var root = new Grid { Background = B("#141B25") }; root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(48) }); root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(62) }); root.RowDefinitions.Add(new RowDefinition()); root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) }); Content = root;
         var header = new DockPanel { LastChildFill = true, Margin = new Thickness(14, 0, 16, 0) };
         var brand = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 28, 0) };
         brand.Children.Add(new Border { Background = B("#78DCC1"), Width = 24, Height = 24, CornerRadius = new CornerRadius(5), Child = new TextBlock { Text = "C", Foreground = B("#13251F"), FontWeight = FontWeights.Bold, FontSize = 18, HorizontalAlignment = HorizontalAlignment.Center } });
         brand.Children.Add(new TextBlock { Text = "coat", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(9, -4, 0, 0) }); header.Children.Add(brand);
         var menu = new Menu { Background = Brushes.White, Foreground = Brushes.Black, VerticalAlignment = VerticalAlignment.Center };
-        var fm = Menu(L.T("Fichier")); Add(fm, L.T("Nouveau plan"), "Ctrl+N", New); Add(fm, L.T("Ouvrir…"), "Ctrl+O", Open); Add(fm, L.T("Enregistrer"), "Ctrl+S", () => Save()); Add(fm, L.T("Enregistrer sous…"), "Ctrl+Maj+S", () => Save(true)); fm.Items.Add(new Separator()); Add(fm, L.T("Importer une image…"), "Ctrl+I", ImportImage); Add(fm, L.T("Exporter en PNG…"), "", ExportPng); Add(fm, L.T("Exporter en SVG…"), "", ExportSvg); Add(fm, L.T("Exporter en .map…"), "", ExportMap); fm.Items.Add(new Separator()); Add(fm, L.T("Charger le plan d’exemple"), "", LoadDemo); Add(fm, L.T("Quitter"), "Alt+F4", Close); menu.Items.Add(fm);
+        var fm = Menu(L.T("Fichier")); Add(fm, L.T("Nouveau plan"), "Ctrl+N", New); Add(fm, L.T("Ouvrir…"), "Ctrl+O", Open); recentMenu = Menu(L.T("Ouvert récemment")); fm.Items.Add(recentMenu); UpdateRecentMenu(); Add(fm, L.T("Enregistrer"), "Ctrl+S", () => Save()); Add(fm, L.T("Enregistrer sous…"), "Ctrl+Maj+S", () => Save(true)); fm.Items.Add(new Separator()); Add(fm, L.T("Importer une image…"), "Ctrl+I", ImportImage); Add(fm, L.T("Exporter en PNG…"), "", ExportPng); Add(fm, L.T("Exporter en SVG…"), "", ExportSvg); Add(fm, L.T("Exporter en .map…"), "", ExportMap); fm.Items.Add(new Separator()); Add(fm, L.T("Charger le plan d’exemple"), "", LoadDemo); Add(fm, L.T("Quitter"), "Alt+F4", Close); menu.Items.Add(fm);
         var em = Menu(L.T("Édition")); Add(em, L.Undo, "Ctrl+Z", Undo); Add(em, L.T("Rétablir"), "Ctrl+Y", Redo); em.Items.Add(new Separator()); Add(em, L.T("Tout sélectionner"), "Ctrl+A", Canvas.SelectAll); Add(em, L.T("Dupliquer la sélection"), "Ctrl+D", Duplicate); Add(em, L.T("Supprimer la sélection"), L.T("Suppr"), Canvas.DeleteSelection); menu.Items.Add(em);
         Add(em, L.T("Grouper la sélection"), "Ctrl+G", GroupSelection); Add(em, L.T("Dissocier les groupes"), "Ctrl+Maj+G", UngroupSelection);
         Add(em, L.T("Copier"), "Ctrl+C", () => CopySelection()); Add(em, L.T("Couper"), "Ctrl+X", CutSelection); Add(em, L.T("Coller"), "Ctrl+V", PasteSelection);
         Add(em, L.T("Préférences…"), "Ctrl+OemComma", ShowPreferences);
-        var vm = Menu(L.T("Affichage")); Add(vm, L.T("Cadrer le plan"), L.T("Origine"), Canvas.Fit); Add(vm, L.T("Revenir à l’origine"), "", () => { Canvas.Center = new(); Canvas.Zoom = 1; Canvas.InvalidateVisual(); UpdateStatus(); }); Add(vm, L.T("Afficher / masquer la grille"), "G", () => { Canvas.ShowGrid = !Canvas.ShowGrid; Canvas.InvalidateVisual(); }); Add(vm, L.T("Afficher / masquer les longueurs"), "M", () => { Canvas.ShowLengths = !Canvas.ShowLengths; Canvas.InvalidateVisual(); }); Add(vm, L.T("Afficher les niveaux supérieurs"), "H", ToggleUpperLevels); upperLevelsMenu = (MenuItem)vm.Items[vm.Items.Count - 1]; upperLevelsMenu.IsCheckable = true; Add(vm, L.T("Afficher les niveaux inférieurs"), "Shift+H", ToggleLowerLevels); lowerLevelsMenu = (MenuItem)vm.Items[vm.Items.Count - 1]; lowerLevelsMenu.IsCheckable = true; lowerLevelsMenu.IsChecked = Canvas.ShowLowerLevels; menu.Items.Add(vm);
-        var hm = Menu(L.T("Aide")); Add(hm, L.T("Raccourcis et prise en main"), "F1", Help); Add(hm, L.T("À propos de Coat"), "", () => AppDialog.Show(this, L.T("Coat 1.0.5\n\nEpicteta Lupercal\n\nÉditeur de plans et blueprints pour level design."), L.T("À propos de Coat"), MessageBoxButton.OK, MessageBoxImage.Information)); menu.Items.Add(hm); header.Children.Add(menu);
-        var version = new TextBlock { Text = "EPICTETA LUPERCAL  /  1.0.5", FontSize = 10, Foreground = B("#728196"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right }; DockPanel.SetDock(version, Dock.Right); header.Children.Add(version); root.Children.Add(header);
+        var vm = Menu(L.T("Affichage")); Add(vm, L.T("Cadrer le plan"), L.T("Origine"), Canvas.Fit); Add(vm, L.T("Revenir à l’origine"), "", () => { Canvas.Center = new(); Canvas.Zoom = 1; Canvas.InvalidateVisual(); UpdateStatus(); }); Add(vm, L.T("Afficher / masquer la grille"), "G", () => { Canvas.ShowGrid = !Canvas.ShowGrid; Canvas.InvalidateVisual(); }); Add(vm, L.T("Afficher / masquer les longueurs"), "M", () => { Canvas.ShowLengths = !Canvas.ShowLengths; Canvas.InvalidateVisual(); }); Add(vm, L.T("Afficher les niveaux supérieurs"), "H", ToggleUpperLevels); upperLevelsMenu = (MenuItem)vm.Items[vm.Items.Count - 1]; upperLevelsMenu.IsCheckable = true; Add(vm, L.T("Afficher les niveaux inférieurs"), "Shift+H", ToggleLowerLevels); lowerLevelsMenu = (MenuItem)vm.Items[vm.Items.Count - 1]; lowerLevelsMenu.IsCheckable = true; lowerLevelsMenu.IsChecked = Canvas.ShowLowerLevels; Add(vm, L.T("Organisation"), "", ShowOrganization); menu.Items.Add(vm);
+        var hm = Menu(L.T("Aide")); Add(hm, L.T("Raccourcis et prise en main"), "F1", Help); Add(hm, L.T("À propos de Coat"), "", () => AppDialog.Show(this, AppVersion.Title + "\n\nEpicteta Lupercal\n\n" + L.T("Éditeur de plans et blueprints pour level design."), L.T("À propos de Coat"), MessageBoxButton.OK, MessageBoxImage.Information)); menu.Items.Add(hm); header.Children.Add(menu);
+        var version = new TextBlock { Text = "EPICTETA LUPERCAL  /  " + AppVersion.Number, FontSize = 10, Foreground = B("#728196"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right }; DockPanel.SetDock(version, Dock.Right); header.Children.Add(version); root.Children.Add(header);
         var toolbar = new DockPanel { Margin = new Thickness(12, 8, 12, 8), LastChildFill = false };
         var toolbarBorder = new Border { Background = B("#1B2430"), BorderBrush = B("#2B3645"), BorderThickness = new Thickness(0, 1, 0, 1), Child = toolbar }; Grid.SetRow(toolbarBorder, 1); root.Children.Add(toolbarBorder);
         AddTool(toolbar, EditorTool.Select, "↖", L.T("Sélection"), "V"); AddTool(toolbar, EditorTool.Draw, "╱", L.T("Dessin"), "D"); AddTool(toolbar, EditorTool.Erase, "⌫", L.T("Gomme"), "E"); AddTool(toolbar, EditorTool.Paint, "◐", L.T("Couleur"), "C");
@@ -70,7 +70,7 @@ public partial class MainWindow : Window
         gridChoice.Width = 108; gridChoice.Height = 32; gridChoice.VerticalAlignment = VerticalAlignment.Center;
         foreach (var step in steps) gridChoice.Items.Add(step + L.T(" unités")); gridChoice.SelectedIndex = 5;
         gridChoice.SelectionChanged += (_, _) => { if (!updating && gridChoice.SelectedIndex >= 0) SetGrid(steps[gridChoice.SelectedIndex]); }; toolbar.Children.Add(gridChoice);
-        var save = Button(L.T("Enregistrer"), () => Save()); save.Margin = new Thickness(10, 0, 0, 0); save.ToolTip = L.T("Enregistrer le plan · Ctrl+S"); DockPanel.SetDock(save, Dock.Right); toolbar.Children.Add(save);
+        var save = Button(L.T("Enregistrer"), () => Save()); save.Margin = new Thickness(10, 0, 0, 0); save.ToolTip = L.T("Enregistrer") + " · " + CurrentHint(new(Key.S, ModifierKeys.Control)); DockPanel.SetDock(save, Dock.Right); toolbar.Children.Add(save);
         var fit = Button(L.T("⊞  Cadrer"), Canvas.Fit); fit.ToolTip = L.T("Cadrer le plan") + " · " + CurrentHint(new(Key.Home, ModifierKeys.None)); DockPanel.SetDock(fit, Dock.Right); toolbar.Children.Add(fit);
         var body = new Grid(); body.ColumnDefinitions.Add(new ColumnDefinition()); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(294) }); Grid.SetRow(body, 2); root.Children.Add(body); body.Children.Add(Canvas);
         var sidebar = new Border { Background = B("#1B2430"), BorderBrush = B("#303B49"), BorderThickness = new Thickness(1, 0, 0, 0) };
@@ -102,7 +102,7 @@ public partial class MainWindow : Window
  </Style>
  <Style TargetType="TextBox"><Setter Property="Background" Value="#141D28"/><Setter Property="Foreground" Value="#DFE8F2"/><Setter Property="CaretBrush" Value="#78DCC1"/><Setter Property="BorderBrush" Value="#3B485A"/><Setter Property="Padding" Value="8,6"/><Setter Property="SelectionBrush" Value="#437D70"/></Style>
  <Style TargetType="ComboBox"><Setter Property="Foreground" Value="#DFE8F2"/><Setter Property="Background" Value="#263241"/><Setter Property="BorderBrush" Value="#3B485A"/><Setter Property="Padding" Value="8,6"/>
-  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox"><Grid><ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="#263241" BorderBrush="#3B485A" BorderThickness="1" CornerRadius="4"><TextBlock Text="⌄" Foreground="#B9C7D8" HorizontalAlignment="Right" Margin="0,0,9,0" VerticalAlignment="Center"/></Border></ControlTemplate></ToggleButton.Template></ToggleButton><ContentPresenter Margin="9,0,25,0" VerticalAlignment="Center" IsHitTestVisible="False" Content="{TemplateBinding SelectionBoxItem}"/><Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False"><Border Background="#263241" BorderBrush="#4A5B70" BorderThickness="1" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"><ScrollViewer MaxHeight="360"><ItemsPresenter/></ScrollViewer></Border></Popup></Grid></ControlTemplate></Setter.Value></Setter>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox"><Grid><ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="#263241" BorderBrush="#3B485A" BorderThickness="1" CornerRadius="4"><TextBlock Text="⌄" Foreground="#B9C7D8" HorizontalAlignment="Right" Margin="0,0,9,0" VerticalAlignment="Center"/></Border></ControlTemplate></ToggleButton.Template></ToggleButton><ContentPresenter Margin="9,0,25,0" VerticalAlignment="Center" IsHitTestVisible="False" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/><Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False"><Border Background="#263241" BorderBrush="#4A5B70" BorderThickness="1" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"><ScrollViewer MaxHeight="360"><ItemsPresenter/></ScrollViewer></Border></Popup></Grid></ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType="ComboBoxItem"><Setter Property="Foreground" Value="#DFE8F2"/><Setter Property="Padding" Value="10,6"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem"><Border x:Name="b" Padding="{TemplateBinding Padding}" Background="#263241"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="b" Property="Background" Value="#436155"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
  <Style TargetType="MenuItem"><Setter Property="Background" Value="White"/><Setter Property="Foreground" Value="Black"/><Setter Property="Padding" Value="9,5"/></Style>
@@ -120,13 +120,13 @@ public partial class MainWindow : Window
     }
     private MenuItem Menu(string title) => new() { Header = title, Background = Brushes.White, Foreground = Brushes.Black };
     private void Add(MenuItem parent, string title, string shortcut, Action action)
-    { var item = new MenuItem { Header = title, InputGestureText = shortcut }; item.Click += (_, _) => action(); parent.Items.Add(item); var original = ParseHint(shortcut); if (original != null) shortcutMenus.Add((item, original)); }
+    { RegisterFeature(title, action, menu: true); var item = new MenuItem { Header = title, InputGestureText = shortcut }; var feature = ShortcutSettings.FeatureLabels.FirstOrDefault(label => L.T(label) == title); if (feature != null) featureMenus[item] = feature; item.Click += (_, _) => action(); parent.Items.Add(item); var original = ParseHint(shortcut); if (original != null) { shortcutMenus.Add((item, original)); item.InputGestureText = CurrentHint(original); } }
     private Button Button(string text, Action action)
-    { var b = new Button { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch }; b.Click += (_, _) => action(); return b; }
+    { RegisterFeature(text, action); var b = new Button { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch }; b.Click += (_, _) => action(); return b; }
     private void AddTool(DockPanel bar, EditorTool tool, string icon, string title, string key)
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal }; content.Children.Add(new TextBlock { Text = icon, FontSize = 18, Margin = new Thickness(0, -2, 7, 0) }); content.Children.Add(new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center });
-        var button = Button("", () => SetTool(Canvas.Tool == tool ? EditorTool.None : tool)); button.Content = content; button.Margin = new Thickness(0, 0, 5, 0); button.Padding = new Thickness(11, 7, 11, 7); button.ToolTip = title + " · " + key; toolButtons[tool] = button; bar.Children.Add(button);
+        var button = Button("", () => SetTool(Canvas.Tool == tool ? EditorTool.None : tool)); button.Content = content; button.Margin = new Thickness(0, 0, 5, 0); button.Padding = new Thickness(11, 7, 11, 7); button.ToolTip = title + " · " + CurrentHint(ParseHint(key)!); toolButtons[tool] = button; bar.Children.Add(button);
     }
     public void SetTool(EditorTool tool) { Canvas.SetTool(tool); UpdateToolButtons(); UpdateStatus(); Canvas.Focus(); }
     private void UpdateToolButtons()
@@ -158,20 +158,20 @@ public partial class MainWindow : Window
         inspectorHelp.ToolTip = new TextBlock { Text = string.Join("\n\n", inspectorHints), TextWrapping = TextWrapping.Wrap, MaxWidth = 340 };
     }
     private void Divider() { inspector.Children.Add(new Border { Height = 1, Background = B("#303D4C"), Margin = new Thickness(0, 18, 0, 20) }); }
-    private TextBox Field(string title, string value)
+    private TextBox Field(string title, string value, bool numeric = true)
     {
         var row = new Grid { Margin = new Thickness(0, 0, 0, 8) }; row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(82) }); row.ColumnDefinitions.Add(new ColumnDefinition());
         row.Children.Add(new TextBlock { Text = title, Foreground = B("#A7B6C9"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
-        var input = new TextBox { Text = value, MinWidth = 60 }; System.Windows.Automation.AutomationProperties.SetName(input, title); Grid.SetColumn(input, 1); row.Children.Add(input); inspector.Children.Add(row); return input;
+        var input = new TextBox { Text = value, MinWidth = 60 }; System.Windows.Automation.AutomationProperties.SetName(input, title); Grid.SetColumn(input, 1); row.Children.Add(input); inspector.Children.Add(row); if (numeric) NumericInput(input); return input;
     }
     private void ModeButtons(string[] labels, int active, Action<int> choose)
     {
         var grid = new System.Windows.Controls.Primitives.UniformGrid { Rows = 1, Margin = new Thickness(0, 0, 0, 12) };
-        for (int i = 0; i < labels.Length; i++) { int index = i; var b = Button(labels[i], () => choose(index)); b.FontSize = 11; b.Padding = new Thickness(4, 8, 4, 8); b.Margin = new Thickness(0, 0, i == labels.Length - 1 ? 0 : 4, 0); if (active == i) { b.Background = B("#304E48"); b.BorderBrush = B("#6DC8B0"); b.Foreground = B("#9BEBD4"); } grid.Children.Add(b); } inspector.Children.Add(grid);
+        for (int i = 0; i < labels.Length; i++) { int index = i; var b = Button(labels[i], () => choose(index)); b.FontSize = 11; b.Padding = new Thickness(4, 8, 4, 8); b.Margin = new Thickness(0, 0, i == labels.Length - 1 ? 0 : 4, 0); if (labels.SequenceEqual(new[] { L.T("Uni"), L.T("Bandes"), L.Dots })) { b.Content = PatternIcon(i); b.ToolTip = labels[i]; System.Windows.Automation.AutomationProperties.SetName(b, labels[i]); } if (active == i) { b.Background = B("#304E48"); b.BorderBrush = B("#6DC8B0"); b.Foreground = B("#9BEBD4"); } grid.Children.Add(b); } inspector.Children.Add(grid);
     }
     public void UpdateInspector()
     {
-        UpdateLevels(); inspector.Children.Clear(); inspectorHints.Clear(); inspectorHelp = null;
+        confirmations.Clear(); inspectorCommands.Clear(); UpdateLevels(); inspector.Children.Clear(); inspectorHints.Clear(); inspectorHelp = null;
         if (Canvas.Tool != EditorTool.None)
         {
         string[] names = { L.T("Sélection"), L.T("Dessin de contours"), L.T("Gomme"), L.T("Coloriage"), "", L.T("Shapes"), L.T("Annotations") };
@@ -179,6 +179,7 @@ public partial class MainWindow : Window
         if (Canvas.Tool == EditorTool.Select)
         {
             ModeButtons(new[] { L.T("•  Points"), L.T("╱  Arêtes"), L.T("▱  Zones") }, (int)Canvas.Mode, i => { Canvas.CancelGesture(); Canvas.ClearSelection(); Canvas.Mode = (SelectionMode)i; UpdateInspector(); Canvas.InvalidateVisual(); Canvas.Focus(); });
+            var across = new CheckBox { Content = L.T("Sélection sur plusieurs niveaux"), IsChecked = Canvas.SelectAcrossLevels }; across.Click += (_, _) => { Canvas.SelectAcrossLevels = across.IsChecked == true; Canvas.ClearSelection(); Canvas.InvalidateVisual(); }; inspector.Children.Add(across);
             TransformInspector();
             if (Canvas.Transform == TransformKind.Translation)
                 ToolHint(Canvas.Mode == SelectionMode.Edge ? L.T("Glissez une arête ou l’intérieur d’une forme entièrement sélectionnée pour la déplacer. Maintenez Maj et glissez pour extruder une épaisseur.") : Canvas.Mode == SelectionMode.Vertex ? L.T("Glissez un point ou saisissez ses coordonnées. Une forme entièrement sélectionnée se déplace aussi depuis son intérieur.") : L.T("Cliquez à l’intérieur d’un contour fermé pour sélectionner toute sa zone."));
@@ -188,8 +189,8 @@ public partial class MainWindow : Window
             var ids = Canvas.SelectionPoints();
             if (ids.Count == 1)
             {
-                var point = Document.Get(ids.First()); var x = Field("X", F(point.X)); var y = Field("Y", F(point.Y));
-                inspector.Children.Add(Button(L.T("Appliquer les coordonnées"), () => { if (Number(x, out var nx) && Number(y, out var ny)) { Mutate(() => { point.P = new V2(nx, ny); Document.Normalize(); }); Canvas.Focus(); } }));
+                var point = Document.Get(ids.First()); var (x, y) = AxisFields(L.T("Position"), F(point.X), F(point.Y), "X", "Y");
+                inspector.Children.Add(ConfirmButton(L.T("Appliquer les coordonnées"), () => { if (Number(x, out var nx) && Number(y, out var ny)) { Mutate(() => { point.P = new V2(nx, ny); Document.Normalize(); }); Canvas.Focus(); } }, x, y));
             }
             else if (ids.Count > 0)
             {
@@ -205,13 +206,17 @@ public partial class MainWindow : Window
                 var groups = Document.MatchingGroups(Canvas.SelectedVertices, Canvas.SelectionEdges());
                 if (groups.Count > 0) Description(string.Join(" · ", groups.Select(g => g.Name)));
                 else ToolHint(L.T("Sélectionnez plusieurs éléments puis regroupez-les pour les manipuler ensemble."));
-                inspector.Children.Add(Button(L.T("Grouper  ·  Ctrl+G"), GroupSelection));
-                if (groups.Count > 0) { var ungroup = Button(L.T("Dissocier  ·  Ctrl+Maj+G"), UngroupSelection); ungroup.Margin = new Thickness(0, 6, 0, 0); inspector.Children.Add(ungroup); }
+                if (groups.Count == 1) GroupNameControls(groups[0]);
+                var actions = new System.Windows.Controls.Primitives.UniformGrid { Rows = 1 };
+                actions.Children.Add(Button(L.T("Grouper"), GroupSelection));
+                if (groups.Count > 0) { var ungroup = Button(L.T("Dissocier"), UngroupSelection); ungroup.Margin = new Thickness(6, 0, 0, 0); actions.Children.Add(ungroup); }
+                inspector.Children.Add(actions);
             }
         }
         else if (Canvas.Tool == EditorTool.Annotation) AnnotationInspector();
         else if (Canvas.Tool == EditorTool.Draw)
         {
+            DrawInspector();
             ToolHint(L.T("Placez les points sur les intersections de la grille. Chaque clic prolonge le contour."));
             ToolHint(L.T("Revenez au premier point pour fermer une zone. Échap ou clic droit termine le tracé."));
             var card = new Border { Background = B("#243B38"), CornerRadius = new CornerRadius(5), Padding = new Thickness(12), Child = new TextBlock { Text = L.F($"Aimantation active  ·  {Document.Grid} u"), Foreground = B("#94DCC8"), FontSize = 12 } }; inspector.Children.Add(card);
@@ -241,11 +246,11 @@ public partial class MainWindow : Window
             inspector.Children.Add(palette);
             var wheel = Button(L.T("◉  Roue de couleurs…"), () => ChooseColor(Canvas.PaintColor, color => { Canvas.PaintColor = color; UpdateInspector(); }));
             wheel.Margin = new Thickness(0, 0, 0, 10); inspector.Children.Add(wheel);
-            var hex = Field(L.T("Couleur"), Canvas.PaintColor);
-            inspector.Children.Add(Button(L.T("Utiliser cette couleur"), () => { try { var c = (Color)ColorConverter.ConvertFromString(hex.Text.Trim()); Canvas.PaintColor = $"#{c.R:X2}{c.G:X2}{c.B:X2}"; UpdateInspector(); } catch { Notify(L.T("Couleur invalide. Exemple : #66C5AD")); } }));
+            var hex = Field(L.T("Couleur"), Canvas.PaintColor, numeric: false);
+            inspector.Children.Add(ConfirmButton(L.T("Utiliser cette couleur"), () => { try { var c = (Color)ColorConverter.ConvertFromString(hex.Text.Trim()); Canvas.PaintColor = $"#{c.R:X2}{c.G:X2}{c.B:X2}"; UpdateInspector(); } catch { Notify(L.T("Couleur invalide. Exemple : #66C5AD")); } }, hex));
             if (Canvas.SelectionPoints().Count > 0)
             {
-                var apply = Button(L.T("Colorer la sélection"), () => Mutate(() => { if (Canvas.PaintLines) foreach (var e in Document.Edges.Where(e => Canvas.SelectedEdges.Contains(e.Id))) { e.Color = Canvas.PaintColor; e.Style = Canvas.PaintLineStyle; } else foreach (var f in Canvas.SelectedFaces) { Document.Fills[f] = Canvas.PaintColor; Document.FillPatterns[f] = Canvas.PaintPattern; } })); apply.Margin = new Thickness(0, 8, 0, 0); inspector.Children.Add(apply);
+                var apply = Button(L.T("Colorer la sélection"), () => Mutate(() => { if (Canvas.PaintLines) foreach (var e in Document.Edges.Where(e => Canvas.SelectedEdges.Contains(e.Id))) { e.Color = Canvas.PaintColor; e.Style = Canvas.PaintLineStyle; } else foreach (var f in Canvas.SelectedFaces) { Canvas.PaintFace(f); } })); apply.Margin = new Thickness(0, 8, 0, 0); inspector.Children.Add(apply);
             }
             WallColorControls();
         }
@@ -257,7 +262,7 @@ public partial class MainWindow : Window
             Description(bg.Name);
             var visible = new CheckBox { Content = L.T("Afficher sous la grille"), IsChecked = bg.Visible }; visible.Click += (_, _) => Mutate(() => bg.Visible = visible.IsChecked == true); inspector.Children.Add(visible);
             var op = Field(L.T("Opacité %"), F(bg.Opacity * 100)); var x = Field(L.T("Origine X"), F(bg.X)); var y = Field(L.T("Origine Y"), F(bg.Y)); var w = Field(L.T("Largeur (u)"), F(bg.Width));
-            inspector.Children.Add(Button(L.T("Appliquer à l’image"), () => { if (Number(op, out var opacity) && Number(x, out var nx) && Number(y, out var ny) && Number(w, out var width) && width > 0) Mutate(() => { bg.Height *= width / bg.Width; bg.Width = width; bg.X = nx; bg.Y = ny; bg.Opacity = Math.Clamp(opacity / 100, 0, 1); }); }));
+            inspector.Children.Add(ConfirmButton(L.T("Appliquer à l’image"), () => { if (Number(op, out var opacity) && Number(x, out var nx) && Number(y, out var ny) && Number(w, out var width) && width > 0) Mutate(() => { bg.Height *= width / bg.Width; bg.Width = width; bg.X = nx; bg.Y = ny; bg.Opacity = Math.Clamp(opacity / 100, 0, 1); }); }, op, x, y, w));
             var remove = Button(L.T("Retirer l’image"), () => Mutate(() => Document.Background = null)); remove.Margin = new Thickness(0, 7, 0, 0); inspector.Children.Add(remove);
         }
         else
@@ -271,7 +276,7 @@ public partial class MainWindow : Window
     {
         levelsPanel.Children.Clear();
         levelsPanel.Children.Add(new TextBlock { Text = L.T("NIVEAUX"), FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = B("#8596AB"), Margin = new Thickness(0, 0, 0, 10) });
-        levelsPanel.Children.Add(new LevelPreview(Document.Levels, Document.ActiveLevel) { Height = compactLevels ? 96 : 132 });
+        levelsPanel.Children.Add(new LevelPreview(Document.Levels, Document.ActiveLevel) { Height = compactLevels || Canvas.Tool == EditorTool.Select ? 96 : 132 });
         var row = new Grid { Margin = new Thickness(0, 10, 0, 0) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
         var down = Button("↓", () => ChangeAdjacentLevel(-1)); down.Padding = new Thickness(0); down.IsEnabled = Document.ActiveLevel > -999; down.ToolTip = L.T("Passer au niveau inférieur (créé si nécessaire) · Page ↓"); row.Children.Add(down);
@@ -281,16 +286,18 @@ public partial class MainWindow : Window
         var up = Button("↑", () => ChangeAdjacentLevel(1)); up.Padding = new Thickness(0); up.IsEnabled = Document.ActiveLevel < 999; up.ToolTip = L.T("Passer au niveau supérieur (créé si nécessaire) · Page ↑"); Grid.SetColumn(up, 2); row.Children.Add(up); levelsPanel.Children.Add(row);
         var delete = Button(L.T("Supprimer ce niveau"), DeleteActiveLevel); delete.FontSize = 11; delete.Padding = new Thickness(5); delete.Margin = new Thickness(0, 7, 0, 0); delete.Foreground = B("#E3A0A9"); levelsPanel.Children.Add(delete);
         LevelHeightControls();
+        var organize = Button(L.T("Organisation"), ShowOrganization); organize.Margin = new Thickness(0, 6, 0, 0); organize.FontSize = 11; organize.Padding = new Thickness(5); levelsPanel.Children.Add(organize);
         if (Canvas.SelectionPoints().Count > 0 || Canvas.SelectedAnnotation != null)
         {
             levelsPanel.Children.Add(new TextBlock { Text = L.T("AFFECTER LA SÉLECTION AU NIVEAU"), FontSize = 9, Foreground = B("#A9B9CC"), Margin = new Thickness(0, 14, 0, 7) });
             var assign = new DockPanel();
             var input = new TextBox { Text = Document.ActiveLevel.ToString(CultureInfo.InvariantCulture), MinWidth = 60, ToolTip = L.T("Numéro de niveau, de -999 à 999") };
-            var apply = Button(L.T("Affecter"), () =>
+            NumericInput(input);
+            var apply = ConfirmButton(L.T("Affecter"), () =>
             {
-                if (int.TryParse(input.Text, out int target) && target >= -999 && target <= 999) AssignSelectionToLevel(target);
+                if (NumericExpression.TryInteger(input.Text, out int target) && target >= -999 && target <= 999) AssignSelectionToLevel(target);
                 else Notify(L.T("Le niveau doit être un entier compris entre -999 et 999."));
-            }); apply.Margin = new Thickness(7, 0, 0, 0); DockPanel.SetDock(apply, Dock.Right); assign.Children.Add(apply); assign.Children.Add(input); levelsPanel.Children.Add(assign);
+            }, input); apply.Margin = new Thickness(7, 0, 0, 0); DockPanel.SetDock(apply, Dock.Right); assign.Children.Add(apply); assign.Children.Add(input); levelsPanel.Children.Add(assign);
             if (Canvas.SelectedVertices.Count > 0) apply.ToolTip = L.T("Les points emportent leurs arêtes incidentes.");
         }
         levelsPanel.Children.Add(new Border { Height = 1, Background = B("#303D4C"), Margin = new Thickness(0, 16, 0, 0) });
@@ -298,7 +305,7 @@ public partial class MainWindow : Window
     public void ChangeLevel(int level)
     {
         if (level < -999 || level > 999 || level == Document.ActiveLevel) return;
-        Canvas.CancelGesture(); Canvas.ClearSelection(); Document.EnsureLevel(level); Document.ActiveLevel = level;
+        Canvas.CancelGesture(); if (!Canvas.SelectAcrossLevels) Canvas.ClearSelection(); Document.EnsureLevel(level); Document.ActiveLevel = level;
         Canvas.RefreshGeometry(); UpdateInspector(); UpdateStatus(); Canvas.Focus();
     }
     public void ChangeAdjacentLevel(int direction)
@@ -332,7 +339,7 @@ public partial class MainWindow : Window
     }
     public void AssignSelectionToLevel(int level)
     {
-        if (level == Document.ActiveLevel) return;
+        if (Canvas.SelectionPoints().All(id => Document.Get(id).Level == level) && Canvas.SelectedAnnotation == null) return;
         if (Canvas.SelectedAnnotation is int noteId) { Canvas.CancelGesture(); Mutate(() => { Document.EnsureLevel(level); Document.Annotations.First(a => a.Id == noteId).Level = level; Document.ActiveLevel = level; }); return; }
         if (Canvas.SelectionPoints().Count == 0) return;
         Canvas.CancelGesture();
@@ -353,7 +360,7 @@ public partial class MainWindow : Window
     private static string F(double n) => n.ToString("0.###", CultureInfo.InvariantCulture);
     private bool Number(TextBox box, out double n)
     {
-        if (double.TryParse(box.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out n) && double.IsFinite(n) && Math.Abs(n) <= 1e7) return true;
+        if (NumericExpression.TryEvaluate(box.Text, out n) && Math.Abs(n) <= 1e8) { if (!double.TryParse(box.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out _)) box.Text = n.ToString("G15", CultureInfo.InvariantCulture); return true; }
         Notify(L.T("Saisissez une coordonnée numérique valide.")); box.Focus(); box.SelectAll(); return false;
     }
     public void Mutate(Action action) { Canvas.Anchor = null; var before = Document.Serialize(); action(); Commit(before); }
@@ -363,12 +370,10 @@ public partial class MainWindow : Window
         Canvas.RefreshGeometry(); UpdateInspector(); UpdateStatus();
     }
     private bool Dirty => saved != Document.Serialize();
-    private void UpdateTitle() => Title = "Coat — " + (string.IsNullOrEmpty(file) ? L.T("Sans titre") : Path.GetFileName(file)) + (Dirty ? " *" : "");
+    private void UpdateTitle() => Title = AppVersion.Title + " — " + (string.IsNullOrEmpty(file) ? L.T("Sans titre") : Path.GetFileName(file)) + (Dirty ? " *" : "");
     public void UpdateStatus(V2? p = null)
     {
-        string[] hints = { L.T("V  Sélection  ·  Translation / Rotation / Échelle à droite  ·  Ctrl+G  Grouper"), L.T("D  Dessin  ·  Clic  Placer un point  ·  Échap  Terminer"), L.T("E  Gomme  ·  Clic  Effacer  ·  Ctrl+Z  Annuler"), L.T("C  Couleur  ·  Clic  Appliquer la couleur"), L.T("Aucun outil  ·  D  Dessin  ·  V  Sélection  ·  Molette  Zoom"), L.T("R  Shapes  ·  Deux clics ou glisser  ·  Échap  Annuler"), L.T("T  Annotation  ·  Clic  Placer ou sélectionner  ·  Glisser  Déplacer") };
-        statusLeft.Text = hints[(int)Canvas.Tool];
-        if (Shortcuts.Bindings.Any(pair => pair.Value != ShortcutSettings.Actions.First(a => a.Label == pair.Key).Default)) statusLeft.Text = L.T("Raccourcis personnalisés · Édition → Préférences pour consulter les touches"); statusRight.Text = (p != null ? L.F($"X {p.Value.X:0.##}   Y {p.Value.Y:0.##}     |     ") : "") + L.F($"Niveau {Document.ActiveLevel}     |     Pas {Document.Grid} u     |     {Canvas.Zoom * 100:0}%");
+        statusLeft.Text = L.T("Édition → Préférences : raccourcis clavier"); statusRight.Text = (p != null ? L.F($"X {p.Value.X:0.##}   Y {p.Value.Y:0.##}     |     ") : "") + L.F($"Niveau {Document.ActiveLevel}     |     Pas {Document.Grid} u     |     {Canvas.Zoom * 100:0}%");
     }
     public void Notify(string text) { statusLeft.Text = text; }
     private void SetGrid(int step)
@@ -380,19 +385,19 @@ public partial class MainWindow : Window
     private void ReplaceFromHistory(Plan p) { Document = p; Canvas.ClearSelection(); Canvas.RefreshGeometry(); SetGrid(p.Grid); }
     public void Duplicate()
     {
-        if (Canvas.SelectedAnnotation is int noteId) { Mutate(() => { var a = Document.Annotations.First(n => n.Id == noteId); var copy = new Annotation { Id = Document.NextId++, Text = a.Text, X = a.X + Document.Grid, Y = a.Y - Document.Grid, Size = a.Size, Color = a.Color, Level = a.Level }; Document.Annotations.Add(copy); Canvas.SelectedAnnotation = copy.Id; }); return; }
+        if (Canvas.SelectedAnnotation is int noteId) { Mutate(() => { var a = Document.Annotations.First(n => n.Id == noteId); var copy = new Annotation { Id = Document.NextId++, Text = a.Text, X = a.X + Document.Grid, Y = a.Y - Document.Grid, Size = a.Size, Color = a.Color, Level = a.Level, IsToken = a.IsToken }; Document.Annotations.Add(copy); Canvas.SelectedAnnotation = copy.Id; }); return; }
         var ids = Canvas.SelectionPoints(); if (ids.Count == 0) return;
         Mutate(() =>
         {
             var old = Document.Edges.Where(e => ids.Contains(e.A) && ids.Contains(e.B)).ToList();
-            var oldFaces = Document.Faces().Where(f => f.Vertices.All(ids.Contains) && Document.Fills.ContainsKey(f.Key)).Select(f => (f.Vertices, Color: Document.Fills[f.Key], Pattern: Document.FillPatterns.GetValueOrDefault(f.Key))).ToList();
-            var map = ids.ToDictionary(id => id, id => Document.Point(Document.Get(id).P + new V2(Document.Grid, -Document.Grid)));
+            var oldFaces = Document.Faces().Where(f => f.Vertices.All(ids.Contains) && Document.Fills.ContainsKey(f.Key)).Select(f => (f.Vertices, Color: Document.Fills[f.Key], Pattern: Document.FillPatterns.GetValueOrDefault(f.Key), Gradient: Document.Gradients.GetValueOrDefault(f.Key))).ToList();
+            var map = ids.ToDictionary(id => id, id => Document.Point(Document.Get(id).P + new V2(Document.Grid, -Document.Grid), Document.Get(id).Level));
             var edgeMap = old.ToDictionary(e => e.Id, e => Document.AddEdge(map[e.A], map[e.B], e.Color));
-            foreach (var e in old) Document.Edges.First(x => x.Id == edgeMap[e.Id]).Style = e.Style;
+            foreach (var e in old) { Document.Edges.First(x => x.Id == edgeMap[e.Id]).Style = e.Style; Document.Edges.First(x => x.Id == edgeMap[e.Id]).CopyArrows(e); }
             Document.CopyGroups(map, edgeMap);
             foreach (var id in map.Values.Where(id => !Document.Edges.Any(e => e.A == id || e.B == id))) Document.Get(id).KeepPoint = true;
             Canvas.ClearSelection(); Canvas.SelectedEdges.UnionWith(edgeMap.Values); if (edgeMap.Count == 0) Canvas.SelectedVertices.UnionWith(map.Values);
-            foreach (var face in oldFaces) { var key = string.Join("-", face.Vertices.Select(id => map[id]).Order()); Document.Fills[key] = face.Color; Document.FillPatterns[key] = face.Pattern; }
+            foreach (var face in oldFaces) { var key = string.Join("-", face.Vertices.Select(id => map[id]).Order()); Document.Fills[key] = face.Color; Document.FillPatterns[key] = face.Pattern; if (face.Gradient != null) Document.Gradients[key] = face.Gradient; }
             Document.Normalize();
         });
     }
@@ -401,6 +406,9 @@ public partial class MainWindow : Window
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (e.OriginalSource is TextBox && key != Key.Escape) return;
         var modifiers = Keyboard.Modifiers;
+        var binding = new Shortcut(key, modifiers);
+        var command = ShortcutSettings.Actions.FirstOrDefault(a => Shortcuts.Bindings.GetValueOrDefault(a.Label) == binding);
+        if (command != null && (command.Command.Key == Key.None || command.Label == "Confirmer")) { if (!e.IsRepeat) ExecuteFeature(command.Label); e.Handled = true; return; }
         if (!Shortcuts.Translate(ref key, ref modifiers)) return;
         bool ctrl = (modifiers & ModifierKeys.Control) != 0, shift = (modifiers & ModifierKeys.Shift) != 0;
         if (ctrl)
@@ -475,13 +483,13 @@ public partial class MainWindow : Window
         {
             if (new FileInfo(path).Length > 70 * 1024 * 1024) throw new InvalidDataException(L.T("Ce plan dépasse la limite de 70 Mo."));
             var plan = Plan.Parse(File.ReadAllText(path)); if (plan.Background != null) EditorCanvas.DecodeImage(plan.Background.Data);
-            LoadDocument(plan, path);
+            LoadDocument(plan, path); RememberRecent(path);
         }
         catch (Exception ex) { Error(L.T("Impossible d’ouvrir le plan"), ex); }
     }
     public void LoadDocument(Plan plan, string path)
     {
-        Canvas.CancelGesture(); Document = plan; file = path; saved = plan.Serialize(); History.Clear(); Canvas.ClearSelection(); Canvas.Center = new V2(plan.ViewX, plan.ViewY); Canvas.Zoom = plan.Zoom; Canvas.RefreshGeometry(); SetGrid(plan.Grid); UpdateInspector(); UpdateStatus();
+        Canvas.CancelGesture(); Document = plan; file = path; saved = plan.Serialize(); History.Clear(); Canvas.ClearSelection(); Canvas.Center = new V2(plan.ViewX, plan.ViewY); Canvas.Zoom = plan.Zoom; RestoreView(); Canvas.RefreshGeometry(); SetGrid(plan.Grid); UpdateInspector(); UpdateStatus();
     }
     private void LoadDemo() { Canvas.CancelGesture(); if (!CheckSave()) return; LoadDocument(Plan.Demo(), ""); saved = new Plan().Serialize(); Canvas.Fit(); UpdateTitle(); }
     public bool Save(bool saveAs = false)
@@ -494,8 +502,8 @@ public partial class MainWindow : Window
         }
         try
         {
-            Document.ViewX = Canvas.Center.X; Document.ViewY = Canvas.Center.Y; Document.Zoom = Canvas.Zoom;
-            WriteAtomic(path, Document.Serialize()); file = path; saved = Document.Serialize(); UpdateInspector(); Notify(L.T("Plan enregistré : ") + Path.GetFileName(path)); return true;
+            SaveView();
+            WriteAtomic(path, Document.Serialize()); file = path; saved = Document.Serialize(); RememberRecent(path); UpdateInspector(); Notify(L.T("Plan enregistré : ") + Path.GetFileName(path)); return true;
         }
         catch (Exception ex) { Error(L.T("Impossible d’enregistrer le plan"), ex); return false; }
     }
@@ -560,15 +568,24 @@ public partial class MainWindow : Window
         }
         s.Append(DecorationSvg.PatternDefinitions());
         var exportFaces = plan.Faces();
+        var regions = new ContourRegions(exportFaces, plan.Vertices.ToDictionary(v => v.Id, v => v.P));
         foreach (int level in plan.Levels.Where(l => l == plan.ActiveLevel || (showLowerLevels && l < plan.ActiveLevel)).Order())
         {
             s.Append($"<g data-level=\"{level}\" opacity=\"{F(plan.LevelOpacity(level))}\">");
             foreach (var f in exportFaces.Where(f => f.Level == level).OrderByDescending(f => f.Area)) if (plan.Fills.TryGetValue(f.Key, out var color))
             {
                 var points = string.Join(" ", f.Vertices.Select(id => F(plan.Get(id).X) + "," + F(-plan.Get(id).Y)));
-                s.Append(DecorationSvg.Polygon(points, color, plan.FillOpacity(level), plan.FillPatterns.GetValueOrDefault(f.Key)));
+                string path = string.Join(" ", regions.Loops(f.Key).Select(loop => "M " + string.Join(" L ", loop.Select(p => F(p.X) + "," + F(-p.Y))) + " Z"));
+                string clip = "clip-" + f.Key; s.Append($"<defs><clipPath id=\"{clip}\"><path d=\"{path}\" clip-rule=\"evenodd\" fill-rule=\"evenodd\"/></clipPath></defs><g clip-path=\"url(#{clip})\">");
+                if (plan.Gradients.TryGetValue(f.Key, out var gradient))
+                {
+                    string id = "gradient-" + f.Key; double angle = gradient.Angle * Math.PI / 180;
+                    s.Append($"<defs><linearGradient id=\"{id}\" x1=\"{F(.5 - .5 * Math.Cos(angle))}\" y1=\"{F(.5 + .5 * Math.Sin(angle))}\" x2=\"{F(.5 + .5 * Math.Cos(angle))}\" y2=\"{F(.5 - .5 * Math.Sin(angle))}\"><stop offset=\"0\" stop-color=\"{Escape(color)}\"/><stop offset=\"1\" stop-color=\"{Escape(gradient.EndColor)}\"/></linearGradient></defs><polygon points=\"{points}\" fill=\"url(#{id})\" opacity=\"{F(plan.FillOpacity(level))}\"/>");
+                }
+                else s.Append(DecorationSvg.Polygon(points, color, plan.FillOpacity(level), plan.FillPatterns.GetValueOrDefault(f.Key)));
+                s.Append("</g>");
             }
-            foreach (var e in plan.Edges.Where(e => plan.LevelOf(e) == level)) { var a = plan.Get(e.A); var endpoint = plan.Get(e.B); s.Append($"<line x1=\"{F(a.X)}\" y1=\"{F(-a.Y)}\" x2=\"{F(endpoint.X)}\" y2=\"{F(-endpoint.Y)}\" stroke=\"{Escape(e.Color)}\" stroke-width=\"2\"{DecorationSvg.Dash(e.Style)}/>"); }
+            foreach (var e in plan.Edges.Where(e => plan.LevelOf(e) == level)) { var a = plan.Get(e.A); var endpoint = plan.Get(e.B); s.Append($"<line x1=\"{F(a.X)}\" y1=\"{F(-a.Y)}\" x2=\"{F(endpoint.X)}\" y2=\"{F(-endpoint.Y)}\" stroke=\"{Escape(e.Color)}\" stroke-width=\"2\"{DecorationSvg.Dash(e.Style)}/>"); s.Append(ArrowGeometry.Svg(plan, e)); }
             foreach (var note in plan.Annotations.Where(a => a.Level == level)) s.Append(DecorationSvg.Text(note));
             s.Append("</g>");
         }
@@ -585,7 +602,10 @@ public partial class MainWindow : Window
         return s.Append("</svg>").ToString();
     }
     private void Error(string title, Exception ex) { if (TestMode) throw new InvalidOperationException(title, ex); AppDialog.Show(this, ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Error); }
-    private void Help() => AppDialog.Show(this,
-        L.T("Coat 1.0.5 — Epicteta Lupercal\n\nRACCOURCIS PAR DÉFAUT\nV : Sélection · D : Dessin · R : Shapes\nC : Couleur · E : Gomme · T : Annotation\nZ : Points · X : Arêtes · F : Zones\nW : Translation · Maj+R : Rotation · Maj+S : Échelle\n\nÉchap annule le geste, retire la sélection et revient à Sélection.\nClic droit termine un tracé en conservant l’outil.\nCtrl+clic ajoute à la sélection. Maj+glisser une arête crée une extrusion.\nCtrl+C / X / V : copier / couper / coller\nCtrl+G : grouper · Ctrl+Maj+G : dissocier\nCtrl+Z : annuler · Ctrl+Y : rétablir\n\nVUE ET NIVEAUX\nMolette : zoom · Flèches : déplacer la vue\nClic milieu/droit ou Espace+glisser : déplacer la vue\nA : cadrer · G : grille · M : longueurs\n1–0 : pas de grille de 1 à 512 unités\nPage Up / Down : changer de niveau\nH : niveaux supérieurs · Maj+H : niveaux inférieurs\n\nFORMES ET PRÉFÉRENCES\nCercles et escaliers : saisie numérique, boutons ▴/▾ ou touches Haut/Bas dans le champ.\nCtrl+, ou Édition → Préférences : langue, recherche de raccourcis et préréglages Ergonomique / Classique.\n\nCtrl+S : enregistrer · Ctrl+O : ouvrir · Ctrl+N : nouveau\nFichier : importer une image, exporter en PNG, SVG ou .map.\nCliquez à nouveau sur l’outil actif pour afficher les réglages de l’image de référence."),
-        L.T("Prise en main de Coat"), MessageBoxButton.OK, MessageBoxImage.Information);
+    private void Help()
+    {
+        var assigned = ShortcutSettings.Actions.Where(a => Shortcuts.Bindings[a.Label].Key != Key.None)
+            .Select(a => L.ShortcutLabel(a.Label) + " : " + Shortcuts.Bindings[a.Label]);
+        AppDialog.Show(this, AppVersion.Title + " — Epicteta Lupercal\n\n" + L.T("Choisissez un outil dans la barre supérieure et réglez ses options à droite. Molette : zoom. Clic milieu/droit ou Espace+glisser : déplacer la vue. Ctrl+clic : sélection multiple. Maj+glisser une arête : extrusion.\n\nLes champs numériques acceptent +, -, *, / et les parenthèses. Entrée valide ; les annotations multilignes conservent leurs retours à la ligne.\n\nÉdition → Préférences permet d’attribuer ou de supprimer chaque raccourci. Les nouvelles actions restent non attribuées.\n\nRACCOURCIS ATTRIBUÉS") + "\n" + string.Join("\n", assigned), L.T("Prise en main de Coat"), MessageBoxButton.OK, MessageBoxImage.Information);
+    }
 }

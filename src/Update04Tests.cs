@@ -24,7 +24,7 @@ internal static class Update04Tests
         check(svg.Descendants(ns + "pattern").Count() == 2 && svg.Descendants(ns + "line").Count(e => (string?)e.Attribute("stroke-dasharray") == "16 8") == 6, "SVG defines motifs and exports long dashes");
         check(svg.Descendants(ns + "tspan").First().Value == "Entrée <A> & sortie" && svg.Descendants(ns + "tspan").Count() == 2, "SVG safely exports multiline Unicode annotations");
         var copy = Plan.Parse(p.Serialize()); copy.DeleteLevel(0); check(copy.Annotations.Count == 0 && copy.FillPatterns.Count == 0, "Deleting a level removes annotations and motifs");
-        var settings = new ShortcutSettings(); settings.Bindings["Dessin"] = new(Key.F6, ModifierKeys.Control);
+        var settings = new ShortcutSettings { Bindings = ShortcutSettings.ErgonomicBindings() }; settings.Bindings["Dessin"] = new(Key.F6, ModifierKeys.Control);
         var path = Path.Combine(output, "preferences-test.json"); settings.Save(path); settings = ShortcutSettings.Load(path);
         Key key = Key.F6; var mods = ModifierKeys.Control;
         check(settings.Translate(ref key, ref mods) && key == Key.D && mods == ModifierKeys.None, "Saved custom shortcut resolves to the original action");
@@ -49,7 +49,7 @@ internal static class Update04Tests
         window.LoadDocument(p, ""); window.SetTool(EditorTool.Select); canvas.Mode = SelectionMode.Face; canvas.SelectedFaces.Add(p.Faces()[0].Key); window.UpdateInspector();
         IEnumerable<T> Desc<T>(DependencyObject d) where T : DependencyObject { if (d is T t) yield return t; for (int i = 0; i < VisualTreeHelper.GetChildrenCount(d); i++) foreach (var child in Desc<T>(VisualTreeHelper.GetChild(d, i))) yield return child; }
         window.UpdateLayout();
-        var dots = Desc<Button>(window).First(b => (b.Content as string) == "Points"); dots.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var dots = Desc<Button>(window).First(b => (b.Content as string) == "Points" || System.Windows.Automation.AutomationProperties.GetName(b) == "Points"); dots.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         check(p.FillPatterns[p.Faces()[0].Key] == FillPattern.Dots, "Selection inspector applies the dots motif via its button");
         var shortDash = Desc<Button>(window).First(b => (b.Content as string) == "Court"); shortDash.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         check(p.FaceEdges(p.Faces()[0]).All(e => p.Edges.First(x => x.Id == e).Style == LineStyle.ShortDash), "Selection inspector applies short dashes to selected zone edges");

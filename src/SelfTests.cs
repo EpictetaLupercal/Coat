@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
@@ -40,7 +40,7 @@ public static class SelfTests
         rejected = false; try { Plan.Parse("{\"Edges\":[{\"Id\":3,\"A\":1,\"B\":2}]}"); } catch (InvalidDataException) { rejected = true; } Check(rejected, "Reject dangling edge references");
         string path = Path.Combine(output, "roundtrip.coat"); MainWindow.WriteAtomic(path, p.Serialize()); MainWindow.WriteAtomic(path, parsed.Serialize()); Check(File.ReadAllText(path) == p.Serialize(), "Atomic save and overwrite");
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-        var window = new MainWindow { TestMode = true, ShowInTaskbar = false, Width = 1440, Height = 900 };
+        var window = new MainWindow { Shortcuts = new() { Bindings = ShortcutSettings.ErgonomicBindings() }, TestMode = true, ShowInTaskbar = false, Width = 1440, Height = 900 };
         window.Show(); window.UpdateLayout(); Pump();
         MainWindow.SaveVisual((FrameworkElement)window.Content, Path.Combine(output, "coat-empty.png"));
         var canvas = window.Canvas;
@@ -105,6 +105,10 @@ public static class SelfTests
         Update13Tests.Run(Check, output);
         Update105Tests.Run(window, Check, output);
         InternationalTests.Run(window, Check, output);
+        Update106Tests.Run(window, Check, output);
+        Update107Tests.Run(window, Check, output);
+        Update108Tests.Run(window, Check, output);
+        Update110Tests.Run(window, Check, output);
         window.Close(); app.Shutdown();
         File.WriteAllLines(Path.Combine(output, "results.txt"), results.Append($"\n{results.Count} checks passed."));
     }

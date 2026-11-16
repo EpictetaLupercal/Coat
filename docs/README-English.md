@@ -1,4 +1,36 @@
-# Coat 1.0.5
+﻿# Coat 1.1.0
+
+## 1.1.0 — Contours and .map export
+
+- Application titles, the header and About use the project assembly version automatically. The title begins with `Coat — v1.1.0` and retains the document name and unsaved indicator.
+- Closed shapes nested on the same level cut holes in the enclosing fill. Even-odd compound paths are used for the canvas, PNG and SVG. Each inner face can still be filled independently; contours on different levels never cut one another.
+- The minimum zoom is now 1%, including mouse wheel, keyboard commands, framing and saved projects.
+- Convex contours without holes bypass horizontal slicing: rotated rectangles export as one six-plane brush; N-sided circles and polygonal ellipses export as one N+2-plane brush. Existing transformed polygon vertices are preserved rather than reconstructed from rendering triangles.
+- Concave regions and holes retain the existing slab partition. Adjacent pieces are merged only when they share a boundary and their convex hull has the same area. This reduces brush counts without filling holes; the greedy merge does not promise a globally minimal partition.
+- Redundant collinear vertices are removed. Local-coordinate area calculations improve numerical stability. Wall/floor classification, height rules, Valve 220 format and existing `.coat` files remain compatible.
+
+See [export validation](EXPORT-1.1.0.md) for the test matrix and verification limits.
+
+## Selection and drawing in 1.0.8
+
+- Move offsets, vertex coordinates and independent scale factors use compact X/Y rows. Group and Ungroup share a row. Select retains line and fill styling; arrow settings now live in Draw.
+- Scale displays eight handles: side handles affect one axis, corners affect both. Hold Shift while dragging a corner to preserve proportions. The opposite side/corner stays fixed. Numeric factors still scale around the selection center and support mirroring. Handles have a constant screen size, including when zoomed out.
+- Right-click without dragging opens a white context menu. Right-drag, middle-drag and Space-drag still pan the view.
+- **Dissolve Vertices** reconnects vertices with exactly two incident edges. Junctions, endpoints, triangle collapses and replacements crossing unrelated geometry are retained. **Dissolve Edges** removes shared interior borders to merge adjacent faces; exterior boundaries and loose edges are retained. Delete keeps its existing behavior.
+- Dissolve preserves fills and groups where applicable and is undoable in one step. A merged filled face inherits the source with the greatest overlapping area; ties use a stable face key. Its pattern and gradient settings follow that source.
+- **Draw** includes a visual line-style dropdown plus Arrow Start, Arrow End, Double Arrow, arrowhead style and size. Settings affect newly drawn segments and any retained edge selection. Select existing edges, then switch to Draw to edit their arrows. The canvas previews the chosen stroke and arrowheads.
+- Dissolve commands can be assigned in Preferences; no new default keys are assigned.
+
+## Visual tools in 1.0.7
+
+- **Text → Token** places circular markers. Select a token to change its color, size or coordinates. Tokens support moving, copying, duplication, undo and per-level visibility.
+- **Snap to Vertices, Midpoints and Grid** snaps annotations and tokens to a vertex or edge midpoint within ten screen pixels, otherwise to the grid. Disable it for free placement. Exact coordinates remain editable.
+- **Color → Fill faces → Gradient** fills a closed face using the active color, an end color and an angle. Click **Apply Gradient** to validate the angle and apply it to selected faces, or click a face to paint it. **Fill** restores ordinary solid/patterned painting. The linear gradient is relative to each face's bounding box; splitting a face retains its settings and fits the gradient to each resulting face.
+- In Draw, the line properties include **Arrow Start**, **Arrow End**, **Double Arrow**, **Triangle / Open / Diamond**, and **Arrow Size** in plan units. Arrow heads are limited to 45% of their edge length to avoid overlap. Splitting a line retains heads at the original endpoints.
+- Focus a numeric field and turn the mouse wheel to adjust it by one. Expressions are evaluated first; bounded controls retain their limits. Validate coordinate/transform fields with Enter or Apply.
+- Solid, Stripes and Dots use visual swatches with translated tooltips and accessibility names.
+
+PNG and SVG include tokens, gradients and arrows. These are drawing decorations: `.map` exports the existing filled geometry, using the gradient's start color for wall/floor classification. New commands receive no default shortcut.
 
 **Epicteta Lupercal**
 
@@ -16,13 +48,31 @@ Coat requires **Windows 10 or 11 and [.NET Desktop Runtime 8 (x64)](https://dotn
 
 **English is the default**, including when upgrading from an earlier version without a language preference. Open **Edit → Preferences → Interface language**, choose **English** or **Français**, then click **Save**. The interface changes immediately; no restart is required. The choice is retained between sessions. **Cancel** leaves the current settings unchanged.
 
-Open preferences with **Ctrl+,** or the Edit menu. Shortcuts are grouped by task and searchable by action name or key. **Ergonomic** selects the new defaults; **Classic** restores the previous defaults (P/L/F for selection and Home to frame all). Both presets change the draft only; click Save to apply. Custom bindings are retained when upgrading, including any that conflict with a new default.
+Open **Edit → Preferences** to assign shortcuts. New installations leave commands **Unassigned**, except for Enter confirmation. Upgrading preserves every existing binding and leaves newly introduced actions unassigned. Click a binding to capture a new combination, or **×** to clear it. Conflict messages identify both commands. Shortcuts are grouped and searchable.
 
-The same window lets you reassign keyboard shortcuts. Click a shortcut and press the new combination. Duplicate or reserved bindings are rejected. **Restore defaults** resets the shortcut draft and selects English; click Save to apply it. Shift+drag to extrude, Ctrl+click, and Space+drag are fixed mouse gestures.
+**Ergonomic** and **Classic** are optional presets applied only when you explicitly select them and save. **Restore defaults** clears the draft bindings (except Enter) and selects English. Cancelling leaves saved settings unchanged. Shift+drag to extrude, Ctrl+click to add/remove selection, and Space+drag to pan remain mouse gestures.
 
 Preferences are saved in `%LOCALAPPDATA%/Coat/preferences.json`. Existing custom shortcuts are preserved when upgrading. Changing the interface language does not change project content: annotations, group names, filenames, geometry, fills, selection, view, and undo history are retained.
 
-The shortcuts below are the defaults. Windows file dialogs follow the operating system's language; Coat's menus, tool panels, messages, help, and confirmation buttons follow the language selected in Coat.
+Keyboard examples below refer to the optional **Ergonomic** preset. They are not assigned automatically on new installations. Every action is also available through the menus, toolbar, or sidebar. Windows file dialogs follow the operating system's language; Coat's menus, tool panels, messages, help, and confirmation buttons follow the language selected in Coat.
+
+## Arithmetic and confirmation
+
+All numeric entry fields accept `+`, `-`, `*`, `/`, parentheses, signed values, and decimal commas or points. Multiplication and division take precedence. Expressions are evaluated on Enter, when leaving the field, or when applying its action. Invalid expressions, division by zero, non-finite results, and values outside a control's range leave the stored value unchanged. Counts and level numbers require integer results.
+
+Enter applies the relevant coordinates, translation, rotation, scale, level height, reference-image settings, or annotation settings. On the canvas, it completes a shape preview or transform gesture, or finishes an open drawing chain. Enter in a multiline annotation inserts a line break; use **Apply text** to commit the text. Standard dialogs retain their default confirmation button.
+
+## Multi-level selection and groups
+
+Enable **Select Across Levels** in Select to include visible lower and upper levels. Ctrl+click, box selection, and Select All then operate across those levels. A group may contain geometry from multiple levels. Moving, rotating, scaling, duplicating, copying, and pasting retain the group's level structure. Assigning a selection to a level intentionally moves its members to that one level.
+
+**View → Outliner**, also available in the level panel, displays Levels → Groups → Shapes. Expand a level to browse its contents. Select a group to manipulate all members, including members on other levels. A group spanning several levels appears under each level containing its geometry. Rename a selected group in the sidebar; ungrouping leaves its geometry intact. Shapes are existing closed outlines; this update does not convert them into new parametric objects.
+
+## Recent projects and saved View settings
+
+**File → Open Recent** lists the ten most recently opened or saved projects, without duplicates. Opening an entry protects unsaved work through the normal save prompt. Missing files produce a message and leave the current plan unchanged. **Clear Recent Files** clears the list, not the files. The list is stored in `%LOCALAPPDATA%/Coat/recent-files.json`.
+
+Saving a project records camera position, zoom, grid spacing and visibility, length-label visibility, upper/lower-level visibility, and multi-level selection scope. Reopening restores those settings. Older files retain their stored camera/grid settings and receive the previous visibility defaults. Navigation alone does not create an undo entry; use Save to persist the view.
 
 ## Draw your first plan
 
@@ -50,7 +100,7 @@ The selection modes are **Vertices** (`Z`), **Edges** (`X`), and **Faces** (`F`)
 
 Rotation and scaling preserve the shape without snapping each vertex independently. Intersections are normalized as in ordinary drawing. These transformations apply to geometry; annotations have separate position and text-size controls. `Esc` cancels a drag in progress. `Ctrl+Z` undoes an entire transformation.
 
-Press `Ctrl+G` to group a selection and `Ctrl+Shift+G` to ungroup it. Clicking any member selects its group. Use `Ctrl+C`, `Ctrl+X`, and `Ctrl+V` to copy, cut, and paste, including between Coat windows. Pasting places the selection near the view center on the active level; repeated pastes are offset by one grid step. Styles, fills, annotations, and fully included groups are preserved. Text fields retain their normal clipboard shortcuts.
+Press `Ctrl+G` to group a selection and `Ctrl+Shift+G` to ungroup it. Clicking any member selects its group. Use `Ctrl+C`, `Ctrl+X`, and `Ctrl+V` to copy, cut, and paste, including between Coat windows. Pasting places the selection near the view center, aligning its lowest selected level with the active level and retaining relative level offsets; repeated pastes are offset by one grid step. Styles, fills, annotations, and fully included groups are preserved. Text fields retain their normal clipboard shortcuts.
 
 ## Shapes and stairs
 
@@ -84,7 +134,7 @@ Choose **Text** (`T`) and click to place an annotation. Click existing text to e
 
 **View → Show Lower Levels** or **Shift+H** toggles lower-level vertices, edges, fills, and annotations. Lower levels are visible by default. Frame All and image exports respect this setting; the active level always remains visible.
 
-Use the level panel or `Page Up`/`Page Down` to switch levels. Adjacent navigation creates a level if needed. The active level is shown in red in the read-only three-quarter preview. Lower levels fade progressively with distance but remain visible. Upper levels are hidden by default; **View → Show Upper Levels** or `H` toggles thin red outlines. These upper-level outlines are guides and cannot be selected from the active level.
+Use the level panel or `Page Up`/`Page Down` to switch levels. Adjacent navigation creates a level if needed. The active level is shown in red in the read-only three-quarter preview. Lower levels fade progressively with distance but remain visible. Upper levels are hidden by default; **View → Show Upper Levels** or `H` toggles thin red outlines. Upper-level outlines become selectable when **Select Across Levels** is enabled in the Select sidebar. Hidden levels are excluded from direct and box selection; explicitly selecting a group selects all of its members.
 
 Use **Move Selection to Level** to assign selected elements to another level. Moving vertices also moves their connected edges. **Delete this level** removes its geometry, fills, and annotations; `Ctrl+Z` restores them.
 

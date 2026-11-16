@@ -11,13 +11,14 @@ public partial class MainWindow
     // Keep the original TextBox and its validation; arrows update it through the same TextChanged path.
     private void AddStepper(TextBox input, string title, double minimum, double maximum, Func<double> current, bool integer = false)
     {
+        input.Tag = new NumericRange(minimum, maximum, integer);
         var parent = (Grid)input.Parent; int column = Grid.GetColumn(input); parent.Children.Remove(input);
         var control = new Grid(); control.ColumnDefinitions.Add(new()); control.ColumnDefinitions.Add(new() { Width = new GridLength(22) });
         Grid.SetColumn(input, 0); control.Children.Add(input);
         var arrows = new Grid { Margin = new Thickness(2, 0, 0, 0) }; arrows.RowDefinitions.Add(new()); arrows.RowDefinitions.Add(new()); Grid.SetColumn(arrows, 1); control.Children.Add(arrows);
         void Adjust(int direction)
         {
-            bool valid = double.TryParse(input.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value);
+            bool valid = NumericExpression.TryEvaluate(input.Text, out var value);
             value = valid ? value : current();
             if (integer) value = Math.Round(value);
             input.Text = Math.Clamp(value + direction, minimum, maximum).ToString("0.###", CultureInfo.InvariantCulture);

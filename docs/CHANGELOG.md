@@ -1,4 +1,43 @@
-# Coat 1.0.5 — Epicteta Lupercal
+﻿# Coat 1.1.0 — Epicteta Lupercal
+
+## 1.1.0
+
+- Version de la barre de titre, de l’en-tête et de la fenêtre À propos issue du projet.
+- Remplissages avec trous par contours Even-Odd, exports PNG/SVG cohérents et niveaux indépendants.
+- Dézoom étendu à 1 %, y compris lors de la réouverture d’un projet.
+- Un brush pour chaque contour convexe sans trou, même après rotation ou mise à l’échelle.
+- Fusion convexe des morceaux issus des formes concaves, sans combler les trous.
+- Nettoyage des sommets colinéaires ; format .coat et règles de murs/sols conservés.
+
+## 1.0.8 — Sélection et dessin
+
+- Champs X/Y regroupés pour le déplacement, les coordonnées et les facteurs d’échelle ; boutons Grouper/Dissocier sur une ligne.
+- Huit poignées d’échelle : côtés pour un axe, coins pour deux axes, Maj sur un coin pour conserver les proportions. Le côté opposé reste fixe. La saisie numérique utilise toujours le centre.
+- Clic droit simple : menu contextuel blanc ; clic droit glissé : déplacement de la vue conservé.
+- Dissoudre les sommets reconnecte les sommets à deux arêtes. Les jonctions, extrémités, triangles qui seraient aplatis et nouveaux croisements sont conservés. Dissoudre les arêtes fusionne les faces adjacentes en retirant leurs frontières intérieures ; les frontières extérieures restent intactes.
+- Couleurs, motifs, dégradés et groupes conservés lorsque possible. Une face fusionnée reprend le remplissage ayant le plus grand recouvrement ; une égalité est départagée par la clé de face. Annulation en une étape.
+- Réglages Arrow déplacés dans Draw, sélecteur visuel déroulant du style du trait et aperçu sur le canvas. Pour modifier des flèches existantes, sélectionner les arêtes puis ouvrir Draw.
+- Commandes de dissolution configurables dans les préférences, sans raccourci attribué par défaut.
+
+## 1.0.7
+
+- Jetons colorés et aimantation des annotations aux sommets, milieux et à la grille.
+- Remplissage uni ou en dégradé à deux couleurs, angle configurable.
+- Flèches au début, à la fin ou aux deux extrémités, trois styles et taille réglable.
+- Molette dans les champs numériques actifs et icônes pour les motifs de remplissage.
+- Sauvegarde, duplication, presse-papiers et exports PNG/SVG des nouveaux éléments.
+- Nouvelles commandes configurables, sans raccourci attribué par défaut.
+
+## 1.0.6
+
+- Raccourcis facultatifs et effaçables, sans nouvelle attribution automatique ; conflits explicites.
+- Calculs arithmétiques dans les champs et validation contextuelle par Entrée.
+- Sélections et groupes sur plusieurs niveaux, renommage et panneau Organisation.
+- Fichiers récents et sauvegarde complète des paramètres d’affichage.
+- Optimisation du rendu, de la navigation et des recherches d’intersections.
+
+
+## 1.0.5
 
 - Échap annule le geste, retire la sélection et revient à Sélection, y compris sans sélection.
 - Préférences par catégories, avec recherche et préréglages Ergonomique / Classique. La capture d’un raccourci nécessite un clic explicite.

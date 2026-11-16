@@ -49,22 +49,24 @@ public partial class MainWindow
     internal Plan CaptureSelection()
     {
         var fragment = new Plan { Grid = Document.Grid };
+        int baseLevel = Canvas.SelectionPoints().Select(id => Document.Get(id).Level).DefaultIfEmpty(Document.ActiveLevel).Min();
         if (Canvas.SelectedAnnotation is int noteId)
         {
             var note = Document.Annotations.First(a => a.Id == noteId);
             fragment.Annotations.Add(CloneNote(note, fragment.NextId++, new V2(), 0)); return fragment;
         }
+        fragment.ActiveLevel = baseLevel; fragment.EnsureLevel(baseLevel);
         var points = Canvas.SelectionPoints();
         // In point mode, include edges joining selected points. In edge/face mode, copy only selected edges.
         var edges = Canvas.SelectionEdges();
         if (Canvas.Mode == SelectionMode.Vertex)
             edges.UnionWith(Document.Edges.Where(e => points.Contains(e.A) && points.Contains(e.B)).Select(e => e.Id));
-        var vertexMap = points.ToDictionary(id => id, id => fragment.Point(Document.Get(id).P));
+        var vertexMap = points.ToDictionary(id => id, id => fragment.Point(Document.Get(id).P, Document.Get(id).Level));
         var edgeMap = new Dictionary<int, int>();
         foreach (var edge in Document.Edges.Where(e => edges.Contains(e.Id)))
         {
             int id = fragment.AddEdge(vertexMap[edge.A], vertexMap[edge.B], edge.Color);
-            fragment.Edges.First(e => e.Id == id).Style = edge.Style; edgeMap[edge.Id] = id;
+            fragment.Edges.First(e => e.Id == id).Style = edge.Style; fragment.Edges.First(e => e.Id == id).CopyArrows(edge); edgeMap[edge.Id] = id;
         }
         foreach (var v in fragment.Vertices) v.KeepPoint = !fragment.Edges.Any(e => e.A == v.Id || e.B == v.Id);
         CopyFaceStyles(Document, fragment, vertexMap, edges);
@@ -72,7 +74,7 @@ public partial class MainWindow
         return fragment;
     }
     private static Annotation CloneNote(Annotation note, int id, V2 offset, int level) => new()
-    { Id = id, X = note.X + offset.X, Y = note.Y + offset.Y, Text = note.Text, Size = note.Size, Color = note.Color, Level = level };
+    { Id = id, X = note.X + offset.X, Y = note.Y + offset.Y, Text = note.Text, Size = note.Size, Color = note.Color, Level = level, IsToken = note.IsToken };
     private static void CopyFaceStyles(Plan source, Plan target, IReadOnlyDictionary<int, int> map, HashSet<int> edges)
     {
         foreach (var face in source.Faces().Where(f => source.FaceEdges(f).IsSubsetOf(edges) && f.Vertices.All(map.ContainsKey)))
@@ -80,6 +82,7 @@ public partial class MainWindow
             var key = string.Join("-", face.Vertices.Select(id => map[id]).Order());
             if (source.Fills.TryGetValue(face.Key, out var color)) target.Fills[key] = color;
             if (source.FillPatterns.TryGetValue(face.Key, out var pattern)) target.FillPatterns[key] = pattern;
+            if (source.Gradients.TryGetValue(face.Key, out var gradient)) target.Gradients[key] = gradient;
         }
     }
     private static void CopyFragmentGroups(Plan source, Plan target, IReadOnlyDictionary<int, int> vertices, IReadOnlyDictionary<int, int> edges)
@@ -98,7 +101,7 @@ public partial class MainWindow
         {
             if (data.Length > 16 * 1024 * 1024) throw new InvalidDataException();
             fragment = Plan.Parse(data);
-            if (fragment.Background != null || fragment.Vertices.Select(v => v.Level).Concat(fragment.Annotations.Select(a => a.Level)).Distinct().Count() > 1) throw new InvalidDataException();
+            if (fragment.Background != null) throw new InvalidDataException();
         }
         catch (Exception ex) when (ex is InvalidDataException or System.Text.Json.JsonException or ArgumentException or NullReferenceException)
         { Notify(L.T("La sélection du presse-papiers est invalide.")); return; }
@@ -111,19 +114,21 @@ public partial class MainWindow
         var offset = (center - origin).Snap(Document.Grid) + new V2(repeat * Document.Grid, -repeat * Document.Grid);
         if (positions.Any(p => Math.Abs(p.X + offset.X) > 1e8 || Math.Abs(p.Y + offset.Y) > 1e8) || Document.Vertices.Count + fragment.Vertices.Count > 20000 || Document.Edges.Count + fragment.Edges.Count > 30000 || Document.Annotations.Count + fragment.Annotations.Count > 5000)
         { Notify(L.T("Le collage dépasse les limites du plan.")); return; }
+        if (fragment.Vertices.Select(v => v.Level).Concat(fragment.Annotations.Select(a => a.Level)).Any(level => level - fragment.ActiveLevel + Document.ActiveLevel < -999 || level - fragment.ActiveLevel + Document.ActiveLevel > 999)) { Notify(L.T("Le collage dépasse les limites du plan.")); return; }
         SetTool(EditorTool.Select);
+        if (fragment.Vertices.Select(v => v.Level).Distinct().Count() > 1) { Canvas.SelectAcrossLevels = true; Canvas.ShowUpperLevels = true; upperLevelsMenu.IsChecked = true; }
         var previousMode = Canvas.Mode;
         if (fragment.Vertices.Count > 0 && fragment.Edges.Count == 0) Canvas.Mode = previousMode = SelectionMode.Vertex;
         else if (previousMode == SelectionMode.Face && fragment.Faces().Count == 0) Canvas.Mode = previousMode = SelectionMode.Edge;
         Mutate(() =>
         {
-            var map = fragment.Vertices.ToDictionary(v => v.Id, v => Document.Point(v.P + offset));
+            var map = fragment.Vertices.ToDictionary(v => v.Id, v => Document.Point(v.P + offset, Document.ActiveLevel + v.Level - fragment.ActiveLevel));
             foreach (var v in fragment.Vertices.Where(v => v.KeepPoint)) Document.Get(map[v.Id]).KeepPoint = true;
             var edgeMap = new Dictionary<int, int>();
             foreach (var edge in fragment.Edges)
             {
                 int id = Document.AddEdge(map[edge.A], map[edge.B], edge.Color);
-                var added = Document.Edges.First(e => e.Id == id); added.Color = edge.Color; added.Style = edge.Style; edgeMap[edge.Id] = id;
+                var added = Document.Edges.First(e => e.Id == id); added.Color = edge.Color; added.Style = edge.Style; added.CopyArrows(edge); edgeMap[edge.Id] = id;
             }
             CopyFaceStyles(fragment, Document, map, fragment.Edges.Select(e => e.Id).ToHashSet());
             CopyFragmentGroups(fragment, Document, map, edgeMap);

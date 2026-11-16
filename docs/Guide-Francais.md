@@ -1,4 +1,23 @@
-# Coat 1.0.5
+﻿# Coat 1.1.0
+
+## 1.1.0
+
+- Version de la barre de titre, de l’en-tête et de la fenêtre À propos issue du projet.
+- Remplissages avec trous par contours Even-Odd, exports PNG/SVG cohérents et niveaux indépendants.
+- Dézoom étendu à 1 %, y compris lors de la réouverture d’un projet.
+- Un brush pour chaque contour convexe sans trou, même après rotation ou mise à l’échelle.
+- Fusion convexe des morceaux issus des formes concaves, sans combler les trous.
+- Nettoyage des sommets colinéaires ; format .coat et règles de murs/sols conservés.
+
+## 1.0.8 — Sélection et dessin
+
+- Champs X/Y regroupés pour le déplacement, les coordonnées et les facteurs d’échelle ; boutons Grouper/Dissocier sur une ligne.
+- Huit poignées d’échelle : côtés pour un axe, coins pour deux axes, Maj sur un coin pour conserver les proportions. Le côté opposé reste fixe. La saisie numérique utilise toujours le centre.
+- Clic droit simple : menu contextuel blanc ; clic droit glissé : déplacement de la vue conservé.
+- Dissoudre les sommets reconnecte les sommets à deux arêtes. Les jonctions, extrémités, triangles qui seraient aplatis et nouveaux croisements sont conservés. Dissoudre les arêtes fusionne les faces adjacentes en retirant leurs frontières intérieures ; les frontières extérieures restent intactes.
+- Couleurs, motifs, dégradés et groupes conservés lorsque possible. Une face fusionnée reprend le remplissage ayant le plus grand recouvrement ; une égalité est départagée par la clé de face. Annulation en une étape.
+- Réglages Arrow déplacés dans Draw, sélecteur visuel déroulant du style du trait et aperçu sur le canvas. Pour modifier des flèches existantes, sélectionner les arêtes puis ouvrir Draw.
+- Commandes de dissolution configurables dans les préférences, sans raccourci attribué par défaut.
 
 ## Finitions de la version 1.0.5
 
@@ -231,3 +250,17 @@ Les menus, panneaux d’outils, raccourcis, messages, confirmations, aide et ind
 La langue et les raccourcis sont enregistrés ensemble dans `%LOCALAPPDATA%/Coat/preferences.json`. Les anciens raccourcis personnalisés sont conservés. Le changement de langue préserve le plan ouvert, la sélection, la vue, l’historique et la palette. Les annotations et noms de groupes saisis dans les projets ne sont pas traduits. Le format `.coat` est désormais le format 6.
 
 Le guide **README-English.md** (livré sous le nom **README.md** dans l’archive) présente toutes les fonctions en anglais.
+
+## Nouveautés 1.0.6
+
+Les nouvelles actions restent sans raccourci. Les touches déjà enregistrées sont conservées. Dans Préférences, × efface une attribution et les conflits indiquent les deux actions. Les exemples de touches de ce guide correspondent au préréglage Ergonomique, à choisir explicitement ; ils ne sont plus attribués automatiquement.
+
+Tous les champs numériques acceptent +, -, *, /, les parenthèses et les décimales avec point ou virgule. Entrée valide l’action du champ ; dans une annotation multiligne, elle conserve le retour à la ligne. Entrée sur la grille confirme une forme ou un geste en cours et termine un tracé ouvert.
+
+La Sélection sur plusieurs niveaux inclut les niveaux visibles. Les groupes peuvent traverser les niveaux, être renommés et manipulés ensemble. Affichage → Organisation montre Niveaux → Groupes → Formes. La duplication et le copier-coller conservent les écarts de niveaux. Les dix derniers fichiers sont dans Fichier → Ouvert récemment.
+
+Les projets enregistrent la vue, le zoom, la grille, les longueurs et la visibilité des niveaux. Les anciens fichiers restent compatibles. Le rendu et les recherches géométriques sont optimisés pour les scènes complexes.
+
+## 1.0.7
+
+Texte → Jeton place un marqueur circulaire dont la couleur, la taille et la position sont modifiables. L’accrochage des annotations vise les sommets et milieux proches, puis la grille ; il peut être désactivé. Couleur → Dégradé propose une couleur de fin et un angle. Les propriétés des arêtes proposent des flèches au début, à la fin ou aux deux extrémités, trois styles et une taille réglable. La molette ajuste de 1 le champ numérique qui a le focus. Les motifs utilisent des icônes avec infobulles. Les exports PNG/SVG incluent ces éléments ; le .map conserve les règles géométriques et utilise la couleur initiale du dégradé.

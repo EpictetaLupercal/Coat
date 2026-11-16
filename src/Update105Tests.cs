@@ -13,7 +13,7 @@ internal static class Update105Tests
 {
     internal static void Run(MainWindow window, Action<bool, string> check, string output)
     {
-        var defaults = new ShortcutSettings(); ShortcutSettings.Validate(defaults.Bindings);
+        var defaults = new ShortcutSettings { Bindings = ShortcutSettings.ErgonomicBindings() }; ShortcutSettings.Validate(defaults.Bindings);
         bool Resolves(ShortcutSettings settings, Key key, Key command, ModifierKeys mods = ModifierKeys.None)
             => settings.Translate(ref key, ref mods) && key == command;
         check(Resolves(defaults, Key.Z, Key.P) && Resolves(defaults, Key.X, Key.L) && Resolves(defaults, Key.A, Key.Home), "Ergonomic keys resolve to stable vertex, edge and frame commands");
@@ -23,15 +23,15 @@ internal static class Update105Tests
         classic["Dessin"] = new(Key.Z, ModifierKeys.None);
         string path = Path.Combine(output, "preferences-105.json");
         File.WriteAllText(path, JsonSerializer.Serialize(classic)); var migrated = ShortcutSettings.Load(path);
-        check(migrated.Bindings["Dessin"].Key == Key.Z && migrated.Bindings["Sélection de points"].Key == Key.P && migrated.Bindings["Sélection d’arêtes"].Key == Key.X, "Migration preserves a custom key that conflicts with a new default");
-        check(migrated.Bindings.Count == ShortcutSettings.Actions.Count && migrated.Bindings.Values.Distinct().Count() == migrated.Bindings.Count, "Migration adds new actions without duplicate bindings");
+        check(migrated.Bindings["Dessin"].Key == Key.Z && migrated.Bindings["Sélection de points"].Key == Key.P && migrated.Bindings["Sélection d’arêtes"].Key == Key.L, "Migration preserves every existing custom and legacy key");
+        check(migrated.Bindings.Count == ShortcutSettings.Actions.Count && migrated.Bindings.Values.Where(b => b.Key != Key.None).Distinct().Count() == migrated.Bindings.Values.Count(b => b.Key != Key.None), "Migration adds new actions without duplicate bindings");
         classic["Dessin"] = new(Key.D, ModifierKeys.None);
         File.WriteAllText(path, JsonSerializer.Serialize(new { Bindings = classic, Language = "fr" })); migrated = ShortcutSettings.Load(path);
-        check(migrated.Bindings["Sélection de points"].Key == Key.Z && migrated.Bindings["Cadrer"].Key == Key.A && migrated.Language == "fr", "Legacy defaults migrate to ergonomic keys while retaining French");
+        check(migrated.Bindings["Sélection de points"].Key == Key.P && migrated.Bindings["Cadrer"].Key == Key.Home && migrated.Language == "fr", "Legacy keys and French are preserved without automatic reassignment");
         new ShortcutSettings { Bindings = ShortcutSettings.ClassicBindings() }.Save(path);
         check(ShortcutSettings.Load(path).Bindings["Sélection de points"].Key == Key.P, "Explicit Classic preset survives a save and reload without remigration");
 
-        window.Shortcuts = new(); window.ChangeLanguage("en"); window.Width = 1440; window.Height = 900;
+        window.Shortcuts = new() { Bindings = ShortcutSettings.ErgonomicBindings() }; window.ChangeLanguage("en"); window.Width = 1440; window.Height = 900;
         var canvas = window.Canvas; window.LoadDocument(new Plan(), ""); window.UpdateLayout(); Pump();
         void Press(UIElement target, Key key) => target.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(target), 0, key) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
         foreach (var tool in Enum.GetValues<EditorTool>())
@@ -43,12 +43,12 @@ internal static class Update105Tests
         Press(window, Key.X); check(canvas.Mode == SelectionMode.Edge, "X activates edge selection through the window handler");
         foreach (var (label, transform) in new[] { ("Translation", TransformKind.Translation), ("Rotation", TransformKind.Rotation), ("Échelle", TransformKind.Scale) })
         {
-            window.Shortcuts = new(); window.Shortcuts.Bindings[label] = new(Key.F7, ModifierKeys.None); Press(window, Key.F7);
+            window.Shortcuts = new() { Bindings = ShortcutSettings.ErgonomicBindings() }; window.Shortcuts.Bindings[label] = new(Key.F7, ModifierKeys.None); Press(window, Key.F7);
             check(canvas.Tool == EditorTool.Select && canvas.Transform == transform, $"Remapped {label} selects the requested transform");
         }
-        window.Shortcuts = new(); window.Shortcuts.Bindings["Niveaux inférieurs visibles"] = new(Key.F8, ModifierKeys.None);
+        window.Shortcuts = new() { Bindings = ShortcutSettings.ErgonomicBindings() }; window.Shortcuts.Bindings["Niveaux inférieurs visibles"] = new(Key.F8, ModifierKeys.None);
         bool lower = canvas.ShowLowerLevels; Press(window, Key.F8); check(canvas.ShowLowerLevels != lower, "Remapped lower-level visibility toggles independently"); canvas.ShowLowerLevels = lower;
-        window.Shortcuts = new(); window.ChangeLanguage("en"); window.UpdateLayout(); Pump();
+        window.Shortcuts = new() { Bindings = ShortcutSettings.ErgonomicBindings() }; window.ChangeLanguage("en"); window.UpdateLayout(); Pump();
         var view = Desc<Menu>(window).Single().Items.OfType<MenuItem>().Single(m => (string)m.Header == "View");
         check(view.Items.OfType<MenuItem>().Single(m => (string)m.Header == "Show Lower Levels").InputGestureText == "Shift+H", "View menu displays the lower-level shortcut");
 
@@ -91,7 +91,7 @@ internal static class Update105Tests
         Button Capture(string name) => Desc<Button>(prefs).Single(b => AutomationProperties.GetName(b) == name);
         Button Action(string name) => Desc<Button>(prefs).Single(b => b.Content as string == name && AutomationProperties.GetName(b) == "");
         var search = Desc<TextBox>(prefs).Single(); search.Text = "vertex"; prefs.UpdateLayout(); Pump();
-        check(Desc<Button>(prefs).Count(b => AutomationProperties.GetName(b) != "") == 1, "Shortcut search filters actions by their translated label");
+        check(Desc<Button>(prefs).Count(b => AutomationProperties.GetName(b) == "Vertex Selection") == 1, "Shortcut search filters actions by their translated label");
         search.Text = ""; prefs.UpdateLayout(); Pump();
         check(Desc<TextBlock>(prefs).Any(t => t.Text == "Selection and Transforms") && Desc<TextBlock>(prefs).Any(t => t.Text == "Navigation and View"), "Preferences group shortcuts into readable categories");
         Press(Capture("Draw"), Key.F6); Click(Action("Save"));

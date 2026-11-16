@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -49,10 +49,12 @@ public partial class EditorCanvas : FrameworkElement
     private BitmapImage? reference;
     private string? referenceData;
     private List<Face> faces = new();
+    private static readonly Dictionary<string, SolidColorBrush> brushes = new();
     private static readonly Brush GridMinor = Brush("#242D3A"), GridMajor = Brush("#323D4C"), Accent = Brush("#78DCC1"), Text = Brush("#99A7BA");
     public static SolidColorBrush Brush(string color)
     {
-        try { var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)); b.Freeze(); return b; }
+        if (brushes.TryGetValue(color, out var cached)) return cached;
+        try { var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)); b.Freeze(); if (brushes.Count > 4096) brushes.Clear(); brushes[color] = b; return b; }
         catch { return new SolidColorBrush(Colors.LightGray); }
     }
     public EditorCanvas(MainWindow host)
@@ -66,16 +68,16 @@ public partial class EditorCanvas : FrameworkElement
     public V2 World(Point p) => new(Center.X + (p.X - ActualWidth / 2) / Zoom, Center.Y - (p.Y - ActualHeight / 2) / Zoom);
     public void RefreshGeometry()
     {
-        faces = Plan.Faces();
-        if (!Plan.Annotations.Any(a => a.Id == SelectedAnnotation && a.Level == Plan.ActiveLevel)) SelectedAnnotation = null;
+        faces = Plan.Faces(); RebuildRenderCache();
+        if (!Plan.Annotations.Any(a => a.Id == SelectedAnnotation)) SelectedAnnotation = null;
         if (referenceData != Plan.Background?.Data)
         {
             reference = null; referenceData = Plan.Background?.Data;
             if (!string.IsNullOrEmpty(referenceData)) reference = DecodeImage(referenceData);
         }
-        SelectedVertices.RemoveWhere(id => !Plan.Vertices.Any(v => v.Id == id && v.Level == Plan.ActiveLevel));
-        SelectedEdges.RemoveWhere(id => !Plan.Edges.Any(e => e.Id == id && Plan.LevelOf(e) == Plan.ActiveLevel));
-        SelectedFaces.RemoveWhere(key => !faces.Any(f => f.Key == key && f.Level == Plan.ActiveLevel));
+        SelectedVertices.RemoveWhere(id => !renderVertices.ContainsKey(id));
+        SelectedEdges.RemoveWhere(id => !renderEdges.ContainsKey(id));
+        SelectedFaces.RemoveWhere(key => !renderFaces.ContainsKey(key));
         InvalidateVisual();
     }
     public static BitmapImage DecodeImage(string data)
@@ -87,23 +89,28 @@ public partial class EditorCanvas : FrameworkElement
     public HashSet<int> SelectionEdges()
     {
         var edges = new HashSet<int>(SelectedEdges);
-        foreach (var face in faces.Where(f => SelectedFaces.Contains(f.Key))) edges.UnionWith(Plan.FaceEdges(face));
+        foreach (string key in SelectedFaces) if (renderFaces.TryGetValue(key, out var face)) edges.UnionWith(CachedFaceEdges(face));
         return edges;
     }
     public void ExpandGroups()
     {
-        var groups = new HashSet<int>(); bool changed;
-        do
+        // Group membership traversal is a work queue, avoiding repeated scans of every group.
+        var byVertex = new Dictionary<int, List<GeometryGroup>>(); var byEdge = new Dictionary<int, List<GeometryGroup>>();
+        void Add(Dictionary<int, List<GeometryGroup>> index, int id, GeometryGroup group) { if (!index.TryGetValue(id, out var members)) index[id] = members = new(); members.Add(group); }
+        foreach (var group in Plan.Groups)
         {
-            changed = false;
-            foreach (var group in Plan.MatchingGroups(SelectedVertices, SelectionEdges()))
-            {
-                if (!groups.Add(group.Id)) continue;
-                SelectedVertices.UnionWith(group.VertexIds.Where(id => Plan.Get(id).Level == Plan.ActiveLevel));
-                SelectedEdges.UnionWith(Plan.Edges.Where(e => group.EdgeIds.Contains(e.Id) && Plan.LevelOf(e) == Plan.ActiveLevel).Select(e => e.Id)); changed = true;
-            }
-        } while (changed);
-        foreach (var face in faces.Where(f => f.Level == Plan.ActiveLevel && Plan.FaceEdges(f).IsSubsetOf(SelectedEdges))) SelectedFaces.Add(face.Key);
+            foreach (int id in group.VertexIds) Add(byVertex, id, group);
+            foreach (int id in group.EdgeIds) { Add(byEdge, id, group); if (renderEdges.TryGetValue(id, out var edge)) { Add(byVertex, edge.A, group); Add(byVertex, edge.B, group); } }
+        }
+        var pending = new Queue<GeometryGroup>(); var seen = new HashSet<int>();
+        void Enqueue(Dictionary<int, List<GeometryGroup>> index, IEnumerable<int> ids) { foreach (int id in ids) if (index.TryGetValue(id, out var groups)) foreach (var g in groups) if (seen.Add(g.Id)) pending.Enqueue(g); }
+        Enqueue(byVertex, SelectedVertices); Enqueue(byEdge, SelectionEdges());
+        while (pending.TryDequeue(out var group))
+        {
+            SelectedVertices.UnionWith(group.VertexIds); SelectedEdges.UnionWith(group.EdgeIds);
+            Enqueue(byVertex, group.VertexIds); Enqueue(byEdge, group.EdgeIds);
+        }
+        foreach (var face in faces.Where(f => CachedFaceEdges(f).IsSubsetOf(SelectedEdges))) SelectedFaces.Add(face.Key);
     }
     private void SelectHit(int? vertex, int? edge, Face? face, bool ctrl)
     {
@@ -117,17 +124,17 @@ public partial class EditorCanvas : FrameworkElement
     public HashSet<int> SelectionPoints()
     {
         var ids = new HashSet<int>(SelectedVertices);
-        foreach (var e in Plan.Edges.Where(e => SelectedEdges.Contains(e.Id))) { ids.Add(e.A); ids.Add(e.B); }
-        foreach (var f in faces.Where(f => SelectedFaces.Contains(f.Key))) ids.UnionWith(f.Vertices);
+        foreach (int id in SelectedEdges) if (renderEdges.TryGetValue(id, out var e)) { ids.Add(e.A); ids.Add(e.B); }
+        foreach (string key in SelectedFaces) if (renderFaces.TryGetValue(key, out var f)) ids.UnionWith(f.Vertices);
         return ids;
     }
     public void SelectAll()
     {
         if (Tool != EditorTool.Select) return;
         ClearSelection();
-        if (Mode == SelectionMode.Vertex) SelectedVertices.UnionWith(Plan.Vertices.Where(v => v.Level == Plan.ActiveLevel).Select(v => v.Id));
-        else if (Mode == SelectionMode.Edge) SelectedEdges.UnionWith(Plan.Edges.Where(e => Plan.LevelOf(e) == Plan.ActiveLevel).Select(e => e.Id));
-        else SelectedFaces.UnionWith(faces.Where(f => f.Level == Plan.ActiveLevel).Select(f => f.Key));
+        if (Mode == SelectionMode.Vertex) SelectedVertices.UnionWith(Plan.Vertices.Where(v => CanSelectLevel(v.Level)).Select(v => v.Id));
+        else if (Mode == SelectionMode.Edge) SelectedEdges.UnionWith(Plan.Edges.Where(e => CanSelectLevel(VertexAt(e.A).Level)).Select(e => e.Id));
+        else SelectedFaces.UnionWith(faces.Where(f => CanSelectLevel(f.Level)).Select(f => f.Key));
         ExpandGroups(); Host.UpdateInspector(); InvalidateVisual();
     }
     public void DeleteSelection()
@@ -141,9 +148,9 @@ public partial class EditorCanvas : FrameworkElement
         Host.Mutate(() => { Plan.Edges.RemoveAll(e => edges.Contains(e.Id) || vertices.Contains(e.A) || vertices.Contains(e.B)); Plan.Vertices.RemoveAll(v => vertices.Contains(v.Id)); Plan.Normalize(); });
         ClearSelection(); Host.UpdateInspector();
     }
-    private Edge? HitEdge(V2 p) => Plan.Edges.Where(e => Plan.LevelOf(e) == Plan.ActiveLevel && Plan.Distance(p, Plan.Get(e.A).P, Plan.Get(e.B).P) <= 9 / Zoom).OrderBy(e => Plan.Distance(p, Plan.Get(e.A).P, Plan.Get(e.B).P)).FirstOrDefault();
-    private Vertex? HitVertex(V2 p) => Plan.Vertices.Where(v => v.Level == Plan.ActiveLevel && (p - v.P).Length <= 10 / Zoom).OrderBy(v => (p - v.P).Length).FirstOrDefault();
-    private Face? HitFace(V2 p) => faces.Where(f => f.Level == Plan.ActiveLevel && Plan.Inside(p, f.Vertices.Select(id => Plan.Get(id).P).ToList())).OrderBy(f => f.Area).FirstOrDefault();
+    private Edge? HitEdge(V2 p) => Plan.Edges.Where(e => CanSelectLevel(VertexAt(e.A).Level) && Plan.Distance(p, VertexAt(e.A).P, VertexAt(e.B).P) <= 9 / Zoom).OrderBy(e => Plan.Distance(p, VertexAt(e.A).P, VertexAt(e.B).P)).FirstOrDefault();
+    private Vertex? HitVertex(V2 p) => Plan.Vertices.Where(v => CanSelectLevel(v.Level) && (p - v.P).Length <= 10 / Zoom).OrderBy(v => (p - v.P).Length).FirstOrDefault();
+    private Face? HitFace(V2 p) => faces.Where(f => CanSelectLevel(f.Level) && faceGeometry[f.Key].Bounds.Contains(new Point(p.X, -p.Y)) && Plan.Inside(p, f.Vertices.Select(id => VertexAt(id).P).ToList())).OrderBy(f => Math.Abs(f.Level - Plan.ActiveLevel)).ThenBy(f => f.Area).FirstOrDefault();
     public bool HasSelectionOrGesture => SelectedAnnotation != null || SelectedVertices.Count + SelectedEdges.Count + SelectedFaces.Count > 0 || Anchor != null || shapeStart != null || dragging || extruding || marquee;
     private static bool Shift => (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
     private static bool Ctrl => (Keyboard.Modifiers & ModifierKeys.Control) != 0;
@@ -154,7 +161,7 @@ public partial class EditorCanvas : FrameworkElement
         ReleaseMouseCapture(); RefreshGeometry(); Host.UpdateInspector(); Host.UpdateStatus();
     }
     private Cursor ToolCursor => Tool == EditorTool.Select || Tool == EditorTool.None ? Cursors.Arrow : Cursors.Cross;
-    public void SetTool(EditorTool t) { CancelGesture(); Tool = t; if (t == EditorTool.None) ClearSelection(); Cursor = ToolCursor; Host.UpdateInspector(); InvalidateVisual(); }
+    public void SetTool(EditorTool t) { CancelGesture(); Tool = t; if (t == EditorTool.Draw) InitializeDrawAppearance(); if (t == EditorTool.None) ClearSelection(); Cursor = ToolCursor; Host.UpdateInspector(); InvalidateVisual(); }
     private void OnDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
@@ -168,6 +175,7 @@ public partial class EditorCanvas : FrameworkElement
         { panning = true; CaptureMouse(); Cursor = Cursors.Hand; return; }
         if (button != MouseButton.Left) return;
         if (Tool == EditorTool.None) return;
+        if (TryBeginScaleHandle()) return;
         if (AnnotationDown(downWorld)) return;
         if (Tool == EditorTool.Shapes)
         {
@@ -182,7 +190,7 @@ public partial class EditorCanvas : FrameworkElement
             if (Anchor == null) { Anchor = chainStart = p; }
             else if ((p - Anchor.Value).Length > 1e-6)
             {
-                var start = Anchor.Value; Host.Mutate(() => Plan.Segment(start, p));
+                var start = Anchor.Value; Host.Mutate(() => { int id = Plan.AddEdge(Plan.Point(start), Plan.Point(p), DrawAppearance.Color); var edge = Plan.Edges.First(e => e.Id == id); edge.Style = DrawAppearance.Style; edge.CopyArrows(DrawAppearance); Plan.Normalize(); });
                 if (chainStart != null && (p - chainStart.Value).Length < 1e-6) Anchor = chainStart = null;
                 else Anchor = p;
             }
@@ -198,7 +206,7 @@ public partial class EditorCanvas : FrameworkElement
         if (Tool == EditorTool.Paint)
         {
             if (PaintLines) { var edge = HitEdge(downWorld); if (edge != null) Host.Mutate(() => { edge.Color = PaintColor; edge.Style = PaintLineStyle; }); }
-            else { var face = HitFace(downWorld); if (face != null) Host.Mutate(() => { Plan.Fills[face.Key] = PaintColor; Plan.FillPatterns[face.Key] = PaintPattern; }); else Host.Notify(L.T("Fermez le contour pour pouvoir le remplir.")); }
+            else { var face = HitFace(downWorld); if (face != null) Host.Mutate(() => { PaintFace(face.Key); }); else Host.Notify(L.T("Fermez le contour pour pouvoir le remplir.")); }
             return;
         }
         bool hit = false;
@@ -220,9 +228,9 @@ public partial class EditorCanvas : FrameworkElement
         if (!hit && !ctrl && Mode != SelectionMode.Face)
         {
             var points = SelectionPoints(); var edges = SelectionEdges();
-            interior = faces.Any(f => f.Level == Plan.ActiveLevel &&
-                (Mode == SelectionMode.Vertex ? f.Vertices.All(points.Contains) : Plan.FaceEdges(f).IsSubsetOf(edges)) &&
-                Plan.Inside(downWorld, f.Vertices.Select(id => Plan.Get(id).P).ToList()));
+            interior = faces.Any(f => CanSelectLevel(f.Level) &&
+                (Mode == SelectionMode.Vertex ? f.Vertices.All(points.Contains) : CachedFaceEdges(f).IsSubsetOf(edges)) &&
+                FillContains(f.Key, downWorld));
             hit = interior;
         }
         if (hit && !ctrl)
@@ -231,7 +239,7 @@ public partial class EditorCanvas : FrameworkElement
             if (shift && Mode == SelectionMode.Edge && !interior && Transform == TransformKind.Translation)
             {
                 extruding = true; extrusionDelta = new V2();
-                extrusionEdges = Plan.Edges.Where(e => SelectedEdges.Contains(e.Id)).Select(e => (Plan.Get(e.A).P, Plan.Get(e.B).P)).ToList();
+                extrusionEdges = Plan.Edges.Where(e => SelectedEdges.Contains(e.Id)).Select(e => (VertexAt(e.A).P, VertexAt(e.B).P)).ToList();
             }
             else BeginTransformDrag();
             CaptureMouse();
@@ -257,15 +265,17 @@ public partial class EditorCanvas : FrameworkElement
     {
         mouseScreen = position; mouseWorld = World(mouseScreen);
         if ((mouseScreen - downScreen).Length > 3) moved = true;
+        if (!dragging && !panning) UpdateScaleCursor();
         if (panning) { var d = mouseScreen - downScreen; Center = downCenter + new V2(-d.X / Zoom, d.Y / Zoom); }
         else if (dragging && moved)
         {
             var delta = (mouseWorld - downWorld).Snap(Plan.Grid);
-            if (SelectedAnnotation is int noteId) { var note = Plan.Annotations.First(a => a.Id == noteId); note.X = annotationOrigin.X + delta.X; note.Y = annotationOrigin.Y + delta.Y; }
+            if (SelectedAnnotation is int noteId) { var note = Plan.Annotations.First(a => a.Id == noteId); var snapped = SnapAnnotation(annotationOrigin + mouseWorld - downWorld); note.X = snapped.X; note.Y = snapped.Y; }
             else if (Transform != TransformKind.Translation) UpdateTransformDrag(shift);
-            else foreach (var pair in original) Plan.Get(pair.Key).P = pair.Value + delta;
+            else foreach (var pair in original) VertexAt(pair.Key).P = pair.Value + delta;
         }
         else if (extruding && moved) extrusionDelta = (mouseWorld - downWorld).Snap(Plan.Grid);
+        if (dragging && moved) RebuildFaceGeometry();
         Host.UpdateStatus(mouseWorld.Snap(Plan.Grid)); InvalidateVisual();
     }
     private void OnUp(object sender, MouseButtonEventArgs e)
@@ -277,7 +287,9 @@ public partial class EditorCanvas : FrameworkElement
         if (panning)
         {
             if (button == MouseButton.Right && !moved) { Anchor = chainStart = shapeStart = null; }
-            panning = false; ReleaseMouseCapture(); Cursor = ToolCursor; InvalidateVisual(); return;
+            panning = false; ReleaseMouseCapture(); Cursor = ToolCursor; InvalidateVisual();
+            if (button == MouseButton.Right && !moved) OpenSelectionMenu(downWorld);
+            return;
         }
         if (button != MouseButton.Left) return;
         if (shaping)
@@ -292,17 +304,17 @@ public partial class EditorCanvas : FrameworkElement
             {
                 var next = Plan.Extrude(SelectedEdges.ToArray(), extrusionDelta); SelectedEdges.Clear(); SelectedEdges.UnionWith(next);
             }
-            else if (dragging && moved && SelectedAnnotation == null && original.Any(pair => (Plan.Get(pair.Key).P - pair.Value).Length > 1e-9)) NormalizeSelection();
+            else if (dragging && moved && SelectedAnnotation == null && original.Any(pair => (VertexAt(pair.Key).P - pair.Value).Length > 1e-9)) NormalizeSelection();
             dragging = extruding = false;
             if (before != null) Host.Commit(before); before = null;
         }
         else if (marquee && moved)
         {
             var rect = new Rect(downScreen, mouseScreen);
-            bool Contains(int id) => rect.Contains(Screen(Plan.Get(id).P));
-            if (Mode == SelectionMode.Vertex) SelectedVertices.UnionWith(Plan.Vertices.Where(v => v.Level == Plan.ActiveLevel && Contains(v.Id)).Select(v => v.Id));
-            else if (Mode == SelectionMode.Edge) SelectedEdges.UnionWith(Plan.Edges.Where(e => Plan.LevelOf(e) == Plan.ActiveLevel && Contains(e.A) && Contains(e.B)).Select(e => e.Id));
-            else SelectedFaces.UnionWith(faces.Where(f => f.Level == Plan.ActiveLevel && f.Vertices.All(Contains)).Select(f => f.Key));
+            bool Contains(int id) => rect.Contains(Screen(VertexAt(id).P));
+            if (Mode == SelectionMode.Vertex) SelectedVertices.UnionWith(Plan.Vertices.Where(v => CanSelectLevel(v.Level) && Contains(v.Id)).Select(v => v.Id));
+            else if (Mode == SelectionMode.Edge) SelectedEdges.UnionWith(Plan.Edges.Where(e => CanSelectLevel(VertexAt(e.A).Level) && Contains(e.A) && Contains(e.B)).Select(e => e.Id));
+            else SelectedFaces.UnionWith(faces.Where(f => CanSelectLevel(f.Level) && f.Vertices.All(Contains)).Select(f => f.Key));
             ExpandGroups();
         }
         marquee = false; ReleaseMouseCapture(); RefreshGeometry(); Host.UpdateInspector();
@@ -310,7 +322,7 @@ public partial class EditorCanvas : FrameworkElement
     private void OnWheel(object sender, MouseWheelEventArgs e)
     {
         var pos = e.GetPosition(this); var beforeZoom = World(pos);
-        Zoom = Math.Clamp(Zoom * Math.Pow(1.15, e.Delta / 120.0), .05, 20);
+        Zoom = Math.Clamp(Zoom * Math.Pow(1.15, e.Delta / 120.0), .01, 20);
         Center += beforeZoom - World(pos); Host.UpdateStatus(); InvalidateVisual(); e.Handled = true;
     }
     public void Fit()
@@ -322,18 +334,64 @@ public partial class EditorCanvas : FrameworkElement
         {
             double x0 = pts.Min(p => p.X), x1 = pts.Max(p => p.X), y0 = pts.Min(p => p.Y), y1 = pts.Max(p => p.Y);
             Center = new V2((x0 + x1) / 2, (y0 + y1) / 2);
-            Zoom = Math.Clamp(Math.Min(Math.Max(ActualWidth - 160, 100) / Math.Max(x1 - x0, 64), Math.Max(ActualHeight - 160, 100) / Math.Max(y1 - y0, 64)), .05, 20);
+            Zoom = Math.Clamp(Math.Min(Math.Max(ActualWidth - 160, 100) / Math.Max(x1 - x0, 64), Math.Max(ActualHeight - 160, 100) / Math.Max(y1 - y0, 64)), .01, 20);
         }
         Host.UpdateStatus(); InvalidateVisual();
     }
     private void Label(DrawingContext dc, string text, Point point, double size = 11, Brush? brush = null)
     {
-        var ft = new FormattedText(text, L.Culture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), size, brush ?? Text, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        var key = (text, size, brush ?? Text, L.Language, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        if (!labels.TryGetValue(key, out var ft)) { ft = new FormattedText(text, L.Culture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), size, brush ?? Text, key.Item5); if (labels.Count > 2048) labels.Clear(); labels[key] = ft; }
         dc.DrawText(ft, point);
     }
-    private Geometry Polygon(Face face)
+    private void DrawCachedScene(DrawingContext target)
     {
-        var g = new StreamGeometry(); using (var ctx = g.Open()) { ctx.BeginFigure(Screen(Plan.Get(face.Vertices[0]).P), true, true); ctx.PolyLineTo(face.Vertices.Skip(1).Select(id => Screen(Plan.Get(id).P)).ToList(), true, false); } g.Freeze(); return g;
+        Edge? hover = !Exporting && Tool == EditorTool.Select && Mode == SelectionMode.Edge && Shift ? HitEdge(mouseWorld) : null;
+        var style = (Plan.ActiveLevel, ShowLowerLevels, ShowUpperLevels, ShowLengths, Zoom, ActualWidth, ActualHeight, Tool, Mode, Exporting, L.Language, VisualTreeHelper.GetDpi(this).PixelsPerDip, hover?.Id, SelectedAnnotation);
+        if (cachedScene == null || !Equals(cachedSceneStyle, style) || !sceneVertices.SetEquals(SelectedVertices) || !sceneEdges.SetEquals(SelectedEdges) || !sceneFaces.SetEquals(SelectedFaces))
+        {
+        navigationBrush = null; cachedScene = new DrawingGroup(); cachedSceneStyle = style; sceneCenter = Center;
+        sceneVertices = SelectedVertices.ToHashSet(); sceneEdges = SelectedEdges.ToHashSet(); sceneFaces = SelectedFaces.ToHashSet();
+        using (var dc = cachedScene.Open())
+        {
+        var selectedPoints = Exporting ? new HashSet<int>() : SelectionPoints();
+        int selectedEdgeCount = selectedPoints.Count == 0 ? 0 : Plan.Edges.Count(e => SelectedEdges.Contains(e.Id) || (selectedPoints.Contains(e.A) && selectedPoints.Contains(e.B)));
+        foreach (int level in Plan.Levels.Where(l => l == Plan.ActiveLevel || (ShowLowerLevels && l < Plan.ActiveLevel)).Order())
+        {
+        dc.PushOpacity(Plan.LevelOpacity(level));
+        foreach (var face in facesByLevel.GetValueOrDefault(level, Array.Empty<Face>()))
+        {
+            if (Plan.Fills.TryGetValue(face.Key, out var color)) { dc.PushOpacity(Plan.FillOpacity(level)); DrawFace(dc, face, FaceBrush(face, color)); dc.Pop(); }
+            if (!Exporting && SelectedFaces.Contains(face.Key)) { dc.PushOpacity(.24); DrawFace(dc, face, Accent, outline: true); dc.Pop(); }
+        }
+        var levelEdges = edgesByLevel.GetValueOrDefault(level, Array.Empty<Edge>());
+        if (hover != null && VertexAt(hover.A).Level == level) dc.DrawLine(CachedPen("#426A62", 9), Screen(VertexAt(hover.A).P), Screen(VertexAt(hover.B).P));
+        DrawEdgeBatch(dc, levelEdges, selectedPoints, hover?.Id);
+        DrawArrows(dc, levelEdges);
+        if (ShowLengths || selectedPoints.Count > 0) foreach (var edge in levelEdges)
+        {
+            bool selected = !Exporting && (SelectedEdges.Contains(edge.Id) || (selectedPoints.Contains(edge.A) && selectedPoints.Contains(edge.B)));
+            var a = Screen(VertexAt(edge.A).P); var b = Screen(VertexAt(edge.B).P);
+            if (ShowLengths || (selected && selectedEdgeCount <= 8))
+            {
+                string length = (VertexAt(edge.A).P - VertexAt(edge.B).P).Length.ToString("0.#", CultureInfo.InvariantCulture) + " u";
+                var mid = new Point((a.X + b.X) / 2 + 7, (a.Y + b.Y) / 2 - 19);
+                dc.DrawRoundedRectangle(Brush("#181F2A"), null, new Rect(mid.X - 4, mid.Y - 2, length.Length * 7 + 8, 19), 3, 3); Label(dc, length, mid, 11, selected ? Accent : Text);
+            }
+        }
+        if (!Exporting) DrawVertexBatch(dc, verticesByLevel.GetValueOrDefault(level, Array.Empty<Vertex>()), selectedPoints);
+        DrawAnnotations(dc, level);
+        dc.Pop();
+        }
+        if (ShowUpperLevels)
+        {
+            DrawEdgeBatch(dc, Plan.Edges.Where(e => VertexAt(e.A).Level > Plan.ActiveLevel), selectedPoints, upper: true);
+            if (!Exporting) foreach (int id in selectedPoints.Where(id => VertexAt(id).Level > Plan.ActiveLevel)) dc.DrawEllipse(Accent, null, Screen(VertexAt(id).P), 4, 4);
+        }
+        }
+        cachedScene.Freeze();
+        }
+        DrawSceneForNavigation(target);
     }
     protected override void OnRender(DrawingContext dc)
     {
@@ -353,47 +411,7 @@ public partial class EditorCanvas : FrameworkElement
             dc.DrawLine(new Pen(Brush("#41564F"), 1), new Point(origin.X, 0), new Point(origin.X, ActualHeight));
             dc.DrawLine(new Pen(Brush("#5C4548"), 1), new Point(0, origin.Y), new Point(ActualWidth, origin.Y));
         }
-        Edge? hover = !Exporting && Tool == EditorTool.Select && Mode == SelectionMode.Edge && Shift ? HitEdge(mouseWorld) : null;
-        var selectedPoints = Exporting ? new HashSet<int>() : SelectionPoints();
-        int selectedEdgeCount = Plan.Edges.Count(e => SelectedEdges.Contains(e.Id) || (selectedPoints.Contains(e.A) && selectedPoints.Contains(e.B)));
-        foreach (int level in Plan.Levels.Where(l => l == Plan.ActiveLevel || (ShowLowerLevels && l < Plan.ActiveLevel)).Order())
-        {
-        dc.PushOpacity(Plan.LevelOpacity(level));
-        foreach (var face in faces.Where(f => f.Level == level).OrderByDescending(f => f.Area))
-        {
-            if (Plan.Fills.TryGetValue(face.Key, out var color)) { dc.PushOpacity(Plan.FillOpacity(level)); dc.DrawGeometry(DecorationBrush(color, Plan.FillPatterns.GetValueOrDefault(face.Key)), null, Polygon(face)); dc.Pop(); }
-            if (!Exporting && SelectedFaces.Contains(face.Key)) { dc.PushOpacity(.24); dc.DrawGeometry(Accent, new Pen(Accent, 3), Polygon(face)); dc.Pop(); }
-        }
-        foreach (var edge in Plan.Edges.Where(e => Plan.LevelOf(e) == level))
-        {
-            bool selected = !Exporting && (SelectedEdges.Contains(edge.Id) || (selectedPoints.Contains(edge.A) && selectedPoints.Contains(edge.B)));
-            var a = Screen(Plan.Get(edge.A).P); var b = Screen(Plan.Get(edge.B).P);
-            if (hover?.Id == edge.Id) dc.DrawLine(new Pen(Brush("#426A62"), 9), a, b);
-            dc.DrawLine(new Pen(selected || hover?.Id == edge.Id ? Accent : Brush(edge.Color), selected ? 2.8 : 2) { DashStyle = EdgeDash(edge.Style) }, a, b);
-            if (ShowLengths || (selected && selectedEdgeCount <= 8))
-            {
-                string length = (Plan.Get(edge.A).P - Plan.Get(edge.B).P).Length.ToString("0.#", CultureInfo.InvariantCulture) + " u";
-                var mid = new Point((a.X + b.X) / 2 + 7, (a.Y + b.Y) / 2 - 19);
-                dc.DrawRoundedRectangle(Brush("#181F2A"), null, new Rect(mid.X - 4, mid.Y - 2, length.Length * 7 + 8, 19), 3, 3); Label(dc, length, mid, 11, selected ? Accent : Text);
-            }
-        }
-        if (!Exporting)
-        {
-            foreach (var v in Plan.Vertices.Where(v => v.Level == level))
-            {
-                bool selected = selectedPoints.Contains(v.Id); double r = Mode == SelectionMode.Vertex && Tool == EditorTool.Select ? 4 : 2.6;
-                dc.DrawEllipse(selected ? Accent : Brush("#202A36"), new Pen(selected ? Accent : Brush("#B0BDC9"), 1), Screen(v.P), r, r);
-            }
-        }
-        DrawAnnotations(dc, level);
-        dc.Pop();
-        }
-        if (ShowUpperLevels)
-        {
-            var upperPen = new Pen(Brush("#FF2020"), .75);
-            foreach (var edge in Plan.Edges.Where(e => Plan.LevelOf(e) > Plan.ActiveLevel))
-                dc.DrawLine(upperPen, Screen(Plan.Get(edge.A).P), Screen(Plan.Get(edge.B).P));
-        }
+        DrawCachedScene(dc);
         if (!Exporting)
         {
             if (Tool == EditorTool.Shapes && Shape != ShapeKind.Stairs && shapeStart != null)
@@ -416,8 +434,7 @@ public partial class EditorCanvas : FrameworkElement
                 var snap = mouseWorld.Snap(Plan.Grid); var point = Screen(snap);
                 if (Anchor != null)
                 {
-                    var pen = new Pen(Accent, 1.8) { DashStyle = DashStyles.Dash };
-                    dc.DrawLine(pen, Screen(Anchor.Value), point);
+                    DrawStrokePreview(dc, Anchor.Value, snap);
                     Label(dc, (snap - Anchor.Value).Length.ToString("0.#", L.Culture) + " u", new Point(point.X + 12, point.Y - 24), 12, Accent);
                     dc.DrawEllipse(Accent, null, Screen(Anchor.Value), 4, 4);
                 }

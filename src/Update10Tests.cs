@@ -18,7 +18,7 @@ internal static class Update10Tests
     {
         string settingsPath = Path.Combine(output, "preferences-10.json");
         check(new ShortcutSettings().Language == "en" && ShortcutSettings.Load(Path.Combine(output, "missing-10.json")).Language == "en", "New installations use English regardless of the operating system language");
-        var legacy = new ShortcutSettings(); legacy.Bindings["Dessin"] = new(Key.F6, ModifierKeys.Control);
+        var legacy = new ShortcutSettings { Bindings = ShortcutSettings.ErgonomicBindings() }; legacy.Bindings["Dessin"] = new(Key.F6, ModifierKeys.Control);
         string legacyPath = Path.Combine(output, "preferences-10-legacy.json"); File.WriteAllText(legacyPath, JsonSerializer.Serialize(legacy.Bindings));
         var migrated = ShortcutSettings.Load(legacyPath);
         check(migrated.Language == "en" && migrated.Bindings["Dessin"] == new Shortcut(Key.F6, ModifierKeys.Control), "Legacy preferences default to English without resetting custom shortcuts");
@@ -78,7 +78,7 @@ internal static class Update10Tests
         check(window.Document.Serialize() == state, "Undo history survives repeated language changes");
 
         window.SetTool(EditorTool.Paint); window.Canvas.PaintLines = false; window.UpdateInspector(); window.UpdateLayout(); Pump();
-        check(Desc<Button>(window).Any(b => b.Content as string == "Dots") && Desc<Button>(window).Any(b => b.Content as string == "Fill faces"), "Fill pattern dots are distinguished from geometric vertices");
+        check(Desc<Button>(window).Any(b => System.Windows.Automation.AutomationProperties.GetName(b) == "Dots") && Desc<Button>(window).Any(b => b.Content as string == "Fill faces"), "Fill pattern dots are distinguished from geometric vertices");
         window.Canvas.PaintLines = true; window.UpdateInspector(); window.UpdateLayout(); Pump();
         check(Desc<Button>(window).Any(b => b.Content as string == "Long dashes") && Desc<Button>(window).Any(b => b.Content as string == "Short dashes"), "Line styles use precise dashed-line terminology");
         var picker = new ColorPicker(window, "#448855"); picker.Show(); picker.UpdateLayout(); Pump();

@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -47,7 +47,7 @@ internal static class Update07Tests
         check(window.Document.Edges.Count == 4 && window.Document.Vertices.Any(v => (v.P - expected).Length < 1e-6), "Shift rotation snaps to 15 degrees without triggering edge extrusion");
         window.Undo();
         canvas.SelectAll(); canvas.SetTransform(TransformKind.Scale); Drag(new(128, 64), new(192, 96));
-        check(Near(window.Document.Vertices.Max(v => v.X) - window.Document.Vertices.Min(v => v.X), 256) && Near(window.Document.Vertices.Max(v => v.Y) - window.Document.Vertices.Min(v => v.Y), 128), "Mouse scale grows uniformly around the selection center");
+        check(Near(window.Document.Vertices.Max(v => v.X), 192) && Near(window.Document.Vertices.Max(v => v.Y), 96) && Near(window.Document.Vertices.Min(v => v.X), 0), "Corner scale grows from the fixed opposite corner");
         before = window.Document.Serialize(); canvas.PointerDown(canvas.Screen(new(192, 96)), MouseButton.Left); canvas.PointerMove(canvas.Screen(new(256, 128))); window.Escape();
         check(window.Document.Serialize() == before && !canvas.HasSelectionOrGesture, "Escape cancels an in-progress scale without leaving partial changes");
         canvas.SelectAll(); canvas.SetTransform(TransformKind.Rotation); window.UpdateLayout(); Pump();
