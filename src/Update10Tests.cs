@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -82,7 +82,7 @@ internal static class Update10Tests
         window.Canvas.PaintLines = true; window.UpdateInspector(); window.UpdateLayout(); Pump();
         check(Desc<Button>(window).Any(b => b.Content as string == "Long dashes") && Desc<Button>(window).Any(b => b.Content as string == "Short dashes"), "Line styles use precise dashed-line terminology");
         var picker = new ColorPicker(window, "#448855"); picker.Show(); picker.UpdateLayout(); Pump();
-        check(picker.Title == "Color Picker — Coat" && Desc<Button>(picker).Any(b => b.Content as string == "Eyedropper…") && Desc<TextBlock>(picker).Any(t => t.Text == "Saved colors") && Desc<TextBlock>(picker).Any(t => t.Text.Contains("G 136")), "Color picker, saved colors, eyedropper, and RGB labels are localized");
+        check(System.Windows.Automation.AutomationProperties.GetName(picker) == "Color Picker — Coat" && Desc<Button>(picker).Any(b => System.Windows.Automation.AutomationProperties.GetName(b) == "Eyedropper" && b.Content is Image) && Desc<TextBlock>(picker).Any(t => t.Text == "Saved colors") && Desc<TextBlock>(picker).Any(t => t.Text.Contains("G 136")), "Color picker, saved colors, eyedropper, and RGB labels are localized");
         MainWindow.SaveVisual(picker, Path.Combine(output, "coat-10-color-picker-en.png")); picker.Close();
         var confirmation = AppDialog.Create(window, "Delete level 0?", "Delete Level", MessageBoxButton.YesNoCancel, MessageBoxResult.No, _ => { }); confirmation.Show(); confirmation.UpdateLayout(); Pump();
         check(Desc<Button>(confirmation).Select(b => b.Content as string).SequenceEqual(new[] { "Yes", "No", "Cancel" }), "Application confirmations use English buttons independently of Windows language"); confirmation.Close();

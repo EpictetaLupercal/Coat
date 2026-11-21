@@ -1,8 +1,9 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -84,89 +85,65 @@ internal sealed class ColorWheel : FrameworkElement
     }
 }
 
-internal sealed class ColorPicker : Window
+internal sealed class ColorPicker : Border
 {
-    internal ColorWheel Wheel { get; } = new();
-    internal TextBox HexInput { get; } = new() { MaxLength = 7, Width = 130 };
+    private readonly MainWindow owner;
+    internal ColorWheel Wheel { get; } = new() { Width = 200, Height = 200 };
+    internal TextBox HexInput { get; } = new() { MaxLength = 7, Width = 112 };
     private readonly Slider hue = new() { Minimum = 0, Maximum = 359.99 }, saturation = new() { Minimum = 0, Maximum = 100 }, brightness = new() { Minimum = 0, Maximum = 100 };
-    private readonly Border preview = new() { Width = 100, Height = 40, CornerRadius = new CornerRadius(4) };
-    private readonly TextBlock rgb = new(), error = new() { Foreground = Brushes.Salmon, TextWrapping = TextWrapping.Wrap, MinHeight = 32 };
+    private readonly Border preview = new() { Width = 44, Height = 30, CornerRadius = new CornerRadius(4) };
+    private readonly TextBlock rgb = new(), error = new() { Foreground = Brushes.Salmon, TextWrapping = TextWrapping.Wrap };
     private readonly PaletteView palette;
+    private readonly List<(Slider Slider, TextBox Input)> fields = new();
     private bool updating;
-    public string SelectedHex => ColorMath.Hex(ColorMath.FromHsv(Wheel.Hue, Wheel.Saturation, Wheel.Value));
-    public ColorPicker(MainWindow owner, string initial)
+    internal event Action<string>? Changed;
+    internal string SelectedHex => ColorMath.Hex(ColorMath.FromHsv(Wheel.Hue, Wheel.Saturation, Wheel.Value));
+    internal ColorPicker(MainWindow owner, string initial)
     {
-        Owner = owner; Title = L.T("Palette de couleurs — Coat"); Width = 540; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize; WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = EditorCanvas.Brush("#1B2430"); Foreground = EditorCanvas.Brush("#DCE4ED"); FontFamily = owner.FontFamily; FontSize = 13; Resources = owner.Resources;
-        var root = new StackPanel { Background = Background, Margin = new Thickness(20) }; Content = root;
-        root.Children.Add(new TextBlock { Text = L.T("Choisir une couleur"), FontSize = 20, FontWeight = FontWeights.SemiBold });
-        root.Children.Add(new TextBlock { Text = L.T("Teinte autour du cercle · saturation du centre vers le bord"), Margin = new Thickness(0, 8, 0, 12) });
-        var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(254) }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.Children.Add(Wheel); root.Children.Add(row);
-        var controls = new StackPanel { Margin = new Thickness(14, 10, 0, 0) }; Grid.SetColumn(controls, 1); row.Children.Add(controls);
+        this.owner = owner; Width = 370; Padding = new Thickness(12); CornerRadius = new CornerRadius(9); BorderBrush = EditorCanvas.Brush("#647387"); BorderThickness = new Thickness(1);
+        Background = EditorCanvas.Brush("#1B2430"); Resources = owner.Resources; Language = owner.Language;
+        TextElement.SetForeground(this,EditorCanvas.Brush("#DCE4ED")); TextElement.SetFontFamily(this,owner.FontFamily); TextElement.SetFontSize(this,12);
+        System.Windows.Automation.AutomationProperties.SetName(this,L.T("Palette de couleurs — Coat"));
+        var root = new StackPanel(); Child = root;
+        var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(206) }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.Children.Add(Wheel); root.Children.Add(row);
+        var controls = new StackPanel { Margin = new Thickness(8,2,0,0) }; Grid.SetColumn(controls,1); row.Children.Add(controls);
         void SliderRow(string title, Slider slider)
         {
-            controls.Children.Add(new TextBlock { Text = title }); slider.Margin = new Thickness(0, 6, 0, 14); controls.Children.Add(slider);
-            System.Windows.Automation.AutomationProperties.SetName(slider, title);
-            slider.ValueChanged += (_, _) => { if (updating) return; Wheel.Hue = hue.Value; Wheel.Saturation = saturation.Value / 100; Wheel.Value = brightness.Value / 100; Sync(); };
+            var heading = new DockPanel(); controls.Children.Add(heading);
+            var input = new TextBox { Width = 46, Padding = new Thickness(3,2,3,2), FontSize = 11 }; DockPanel.SetDock(input,Dock.Right); heading.Children.Add(input);
+            heading.Children.Add(new TextBlock { Text = title, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
+            slider.Margin = new Thickness(0,4,0,10); controls.Children.Add(slider); fields.Add((slider,input));
+            System.Windows.Automation.AutomationProperties.SetName(slider,title); System.Windows.Automation.AutomationProperties.SetName(input,title);
+            slider.ValueChanged += (_,_) => { if (updating) return; Wheel.Hue = hue.Value; Wheel.Saturation = saturation.Value / 100; Wheel.Value = brightness.Value / 100; Sync(); };
+            input.TextChanged += (_,_) => { if (!updating && NumericExpression.TryEvaluate(input.Text,out double n) && n >= slider.Minimum && n <= slider.Maximum) slider.Value = n; };
+            input.PreviewKeyDown += (_,e) => { if (e.Key == Key.Enter) { if (NumericExpression.TryEvaluate(input.Text,out double n) && n >= slider.Minimum && n <= slider.Maximum) { slider.Value=n; input.Text=slider.Value.ToString("0.#",CultureInfo.InvariantCulture); } else error.Text=L.T("Expression numérique invalide."); e.Handled=true; } };
+            input.PreviewMouseWheel += (_,e) => { if (!input.IsKeyboardFocusWithin) return; slider.Value=Math.Clamp(slider.Value+Math.Sign(e.Delta),slider.Minimum,slider.Maximum); e.Handled=true; };
         }
-        SliderRow(L.T("Teinte"), hue); SliderRow(L.T("Saturation"), saturation); SliderRow(L.T("Luminosité"), brightness);
-        controls.Children.Add(rgb);
-        var samples = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 16) }; root.Children.Add(samples);
-        ColorMath.TryHex(initial, out var initialColor);
-        void Sample(string label, Border swatch) { var item = new StackPanel { Margin = new Thickness(0, 0, 20, 0) }; item.Children.Add(new TextBlock { Text = label, Margin = new Thickness(0, 0, 0, 5) }); item.Children.Add(swatch); samples.Children.Add(item); }
-        Sample(L.T("Actuelle"), new Border { Background = new SolidColorBrush(initialColor), Width = 100, Height = 40, CornerRadius = new CornerRadius(4) }); Sample(L.T("Nouvelle"), preview);
-        var hexPanel = new StackPanel(); hexPanel.Children.Add(new TextBlock { Text = L.T("Hexadécimal"), Margin = new Thickness(0, 0, 0, 5) }); hexPanel.Children.Add(HexInput); samples.Children.Add(hexPanel);
-        System.Windows.Automation.AutomationProperties.SetName(HexInput, L.T("Couleur hexadécimale"));
-        HexInput.TextChanged += (_, _) => { if (updating) return; if (ColorMath.TryHex(HexInput.Text, out var color)) { SetColor(color, false); error.Text = ""; } else error.Text = L.T("Utilisez six chiffres hexadécimaux : #66C5AD."); };
-        root.Children.Add(new TextBlock { Text = L.T("Couleurs enregistrées"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 8) });
-        var paletteRow = new StackPanel { Orientation = Orientation.Horizontal }; root.Children.Add(paletteRow);
-        palette = new PaletteView(owner.SavedColors, color => { ColorMath.TryHex(color, out var chosen); SetColor(chosen); }, () => SelectedHex, message => error.Text = message) { Width = 240 };
-        paletteRow.Children.Add(palette);
-        var add = new Button { Content = "+", FontSize = 24, Width = 36, Height = 36, Padding = new Thickness(0), Margin = new Thickness(8, 0, 14, 0), VerticalAlignment = VerticalAlignment.Top, ToolTip = L.T("Enregistrer dans le premier emplacement vide") };
-        System.Windows.Automation.AutomationProperties.SetName(add, L.T("Enregistrer la couleur dans la palette"));
-        add.Click += (_, _) =>
-        {
-            if (!ColorMath.TryHex(HexInput.Text, out var color)) { error.Text = L.T("Couleur invalide : utilisez le format #RRGGBB."); return; }
-            try { owner.SavedColors.Add(ColorMath.Hex(color)); error.Text = ""; } catch (Exception ex) { error.Text = ex.Message; }
-        };
-        paletteRow.Children.Add(add);
-        var pick = new Button { Content = L.T("Pipette…"), Height = 36, VerticalAlignment = VerticalAlignment.Top, ToolTip = L.T("Prélever une couleur sur le plan ou son image de référence. Échap ou clic droit pour annuler.") };
-        System.Windows.Automation.AutomationProperties.SetName(pick, L.T("Pipette"));
-        pick.Click += (_, _) => PickPlanColor(); paletteRow.Children.Add(pick);
-        root.Children.Add(new TextBlock { Text = L.T("+ : ajouter une couleur · clic droit sur une couleur : supprimer"), FontSize = 11, Margin = new Thickness(0, 2, 0, 8) });
+        SliderRow(L.T("Teinte"),hue); SliderRow(L.T("Saturation"),saturation); SliderRow(L.T("Luminosité"),brightness);
+        var samples = new DockPanel { Margin = new Thickness(0,4,0,10) }; root.Children.Add(samples); samples.Children.Add(preview);
+        HexInput.Margin = new Thickness(8,0,8,0); samples.Children.Add(HexInput); samples.Children.Add(rgb);
+        System.Windows.Automation.AutomationProperties.SetName(HexInput,L.T("Couleur hexadécimale"));
+        HexInput.TextChanged += (_,_) => { if (updating) return; if (ColorMath.TryHex(HexInput.Text,out var color)) { SetColor(color,false); error.Text=""; } else error.Text=L.T("Utilisez six chiffres hexadécimaux : #66C5AD."); };
+        root.Children.Add(new TextBlock { Text=L.T("Couleurs enregistrées"), Margin=new Thickness(0,0,0,6) });
+        var paletteRow = new StackPanel { Orientation=Orientation.Horizontal }; root.Children.Add(paletteRow);
+        palette = new PaletteView(owner.SavedColors,color=> { ColorMath.TryHex(color,out var chosen); SetColor(chosen); },()=>SelectedHex,message=>error.Text=message) { Width=230 }; paletteRow.Children.Add(palette);
+        var add = new Button { Content="+", FontSize=22, Width=34, Height=34, Padding=new Thickness(0), Margin=new Thickness(5,0,5,0), VerticalAlignment=VerticalAlignment.Top, ToolTip=L.T("Enregistrer dans le premier emplacement vide") };
+        System.Windows.Automation.AutomationProperties.SetName(add,L.T("Enregistrer la couleur dans la palette"));
+        add.Click += (_,_) => { if (!ColorMath.TryHex(HexInput.Text,out var color)) { error.Text=L.T("Couleur invalide : utilisez le format #RRGGBB."); return; } try { owner.SavedColors.Add(ColorMath.Hex(color)); error.Text=""; } catch(Exception ex) { error.Text=ex.Message; } }; paletteRow.Children.Add(add);
+        var pick = new Button { Content=new Image { Source=ColorUi.EyedropperIcon(),Width=20,Height=20 }, Width=34,Height=34,Padding=new Thickness(4),VerticalAlignment=VerticalAlignment.Top,ToolTip=L.T("Prélever une couleur sur le plan ou son image de référence. Échap ou clic droit pour annuler.") };
+        System.Windows.Automation.AutomationProperties.SetName(pick,L.T("Pipette")); pick.Click += (_,_) => owner.BeginColorSampling(this); paletteRow.Children.Add(pick);
         root.Children.Add(error);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right }; root.Children.Add(buttons);
-        var cancel = new Button { Content = L.T("Annuler"), IsCancel = true, Margin = new Thickness(0, 0, 8, 0) }; cancel.Click += (_, _) => Close(); buttons.Children.Add(cancel);
-        var apply = new Button { Content = L.T("Utiliser cette couleur"), IsDefault = true }; apply.Click += (_, _) => { if (ColorMath.TryHex(HexInput.Text, out var color)) { SetColor(color); DialogResult = true; } else { error.Text = L.T("Couleur invalide : utilisez le format #RRGGBB."); HexInput.Focus(); } }; buttons.Children.Add(apply);
-        Wheel.Changed += () => Sync(); SetColor(initialColor);
+        Wheel.Changed += () => Sync(); ColorMath.TryHex(initial,out var initialColor); SetColor(initialColor);
+        PreviewKeyDown += (_,e) => { if (e.Key == Key.Escape) { Close(); e.Handled=true; } };
     }
-    internal void SetColor(Color color, bool updateHex = true) { (Wheel.Hue, Wheel.Saturation, Wheel.Value) = ColorMath.ToHsv(color); Sync(updateHex); }
-    private void PickPlanColor()
+    internal void Show() => owner.ShowColorPopup(this,owner.Canvas);
+    internal void Close() => owner.CloseColorPicker();
+    internal void SetColor(Color color,bool updateHex=true) { (Wheel.Hue,Wheel.Saturation,Wheel.Value)=ColorMath.ToHsv(color); Sync(updateHex); }
+    private void Sync(bool updateHex=true)
     {
-        double previousOpacity = Opacity;
-        try
-        {
-            var frame = ColorSampling.FromVisual(((MainWindow)Owner).Canvas);
-            var picker = new CanvasColorPicker(this, frame);
-            Opacity = 0;
-            if (picker.ShowDialog() == true && picker.PickedColor is Color color) SetColor(color);
-        }
-        catch (Exception ex) { error.Text = L.T("Prélèvement impossible : ") + ex.Message; }
-        finally { Opacity = previousOpacity; Activate(); }
-    }
-    private void Sync(bool updateHex = true)
-    {
-        updating = true;
-        try { hue.Value = Wheel.Hue; saturation.Value = Wheel.Saturation * 100; brightness.Value = Wheel.Value * 100; var color = ColorMath.FromHsv(Wheel.Hue, Wheel.Saturation, Wheel.Value); preview.Background = new SolidColorBrush(color); rgb.Text = L.F($"R {color.R}  ·  V {color.G}  ·  B {color.B}"); if (updateHex) { HexInput.Text = ColorMath.Hex(color); error.Text = ""; } Wheel.InvalidateVisual(); palette?.Refresh(); }
-        finally { updating = false; }
-    }
-}
-
-public partial class MainWindow
-{
-    private void ChooseColor(string initial, Action<string> apply)
-    {
-        var dialog = new ColorPicker(this, initial);
-        if (dialog.ShowDialog() == true) apply(dialog.SelectedHex);
+        updating=true;
+        try { hue.Value=Wheel.Hue; saturation.Value=Wheel.Saturation*100; brightness.Value=Wheel.Value*100; foreach(var field in fields) if(!field.Input.IsKeyboardFocusWithin)field.Input.Text=field.Slider.Value.ToString("0.#",CultureInfo.InvariantCulture); var color=ColorMath.FromHsv(Wheel.Hue,Wheel.Saturation,Wheel.Value); preview.Background=new SolidColorBrush(color); rgb.Text=L.F($"R {color.R}  ·  V {color.G}  ·  B {color.B}"); rgb.TextWrapping=TextWrapping.Wrap; if(updateHex){HexInput.Text=ColorMath.Hex(color);error.Text="";} Wheel.InvalidateVisual();palette?.Refresh(); }
+        finally { updating=false; }
+        Changed?.Invoke(SelectedHex);
     }
 }

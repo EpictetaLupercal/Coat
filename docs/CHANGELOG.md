@@ -1,4 +1,66 @@
-﻿# Coat 1.1.0 — Epicteta Lupercal
+# Coat 1.2 — Epicteta Lupercal
+
+## 1.2 — Export .map selon la couleur
+
+- Les formes imbriquées ou voisines ne fusionnent que si leurs couleurs RVB, niveau et extrusion sont compatibles. Deux couleurs de sol différentes restent distinctes.
+- Les piliers blancs dans un sol orange conservent leur géométrie et leurs hauteurs. Le sol est découpé autour des formes intérieures pour éviter les solides superposés.
+- Les zones vides restent des trous. Les morceaux compatibles de même couleur continuent à fusionner ; une forme convexe intérieure conserve un brush unique.
+- Les couleurs source sont indiquées dans les commentaires des brushes. Les textures `__TB_empty` restent inchangées : ces commentaires ne créent pas de matériaux colorés dans l’éditeur de carte.
+- Les fichiers `.coat` existants restent compatibles. Le titre affiche **Coat — v1.2**, depuis la configuration du projet.
+
+## 1.1.7 — Ignorer les groupes
+
+- Bouton Ignorer les groupes dans Select → Groupes, disponible même sans sélection et mis en évidence lorsqu’il est actif.
+- Activez pour sélectionner individuellement points, arêtes et zones. La sélection courante est effacée à l’activation ; les groupes restent intacts.
+- Le mode persiste après désélection, Échap, changement de mode et modifications. Recliquez pour réactiver les groupes et étendre la sélection courante à leurs membres.
+- Le bouton reflète aussi le mode individuel du double-clic et permet d’en sortir.
+- Aucun changement du document ou de l’historique. Un projet s’ouvre avec la sélection normale des groupes. Commande configurable sans touche par défaut.
+
+## 1.1.6 — Validation du texte et sélection mixte
+
+- Entrée valide le texte ; Maj+Entrée ajoute un retour à la ligne au curseur. Les textes multilignes existants restent pris en charge.
+- En sélection, le rectangle depuis le vide inclut textes et jetons entièrement contenus, dans les modes Points, Arêtes et Zones.
+- Textes, jetons et géométrie se déplacent, se dupliquent, se copient/collent, se coupent, se suppriment et se transfèrent de niveau ensemble. Annulation en une étape.
+- Ctrl+clic et Ctrl+rectangle ajoutent à la sélection. Échap désélectionne tout. Les niveaux masqués restent exclus ; la sélection entre niveaux inclut les annotations inférieures visibles.
+- Les nouveaux jetons restent désélectionnés après leur pose.
+
+## 1.1.5 — Couleurs en direct et pose rapide des jetons
+
+- Un nouveau jeton reste désélectionné. Changer de symbole prépare le suivant ; un jeton existant reste sélectionnable pour modification.
+- Bouton avec icône de roue et aperçu de la couleur courante. Bulle ancrée avec roue, HSV, Hex, RGB, couleurs enregistrées, ajout et icône de pipette.
+- Valeurs valides appliquées immédiatement, sans Accepter. Fermer par clic extérieur ou Échap conserve la couleur courante. Une saisie incomplète conserve la dernière couleur valide.
+- Une session de couleur sur un objet du plan s’annule en une étape. Changer seulement la couleur du pinceau ne crée pas d’entrée dans l’historique.
+- Pipette directement sur le canvas, image de référence comprise. Clic pour prélever ; Échap ou clic droit pour annuler et revenir à la bulle.
+- Couleurs enregistrées : ajout avec + et suppression au clic droit conservés.
+
+## 1.1.4 — Outil Jetons et palette de symboles
+
+- Bouton Jetons à côté de Texte, sans ancien sélecteur Texte/Jeton dans le panneau.
+- Palette de 22 icônes : rond, carré, triangle, croix, validation, crâne, étoile, cœur, armure, explosion, munitions, fusée et chiffres 0 à 9. Noms au survol uniquement.
+- Choix de forme, couleur et taille avant placement ; sélection pour modifier un jeton existant. Aimantation, déplacement, duplication, presse-papiers et annulation conservés.
+- Dessins vectoriels et chiffres en contours, exports PNG/SVG et sauvegarde des formes. Les anciens jetons restent ronds.
+- Commande Jeton configurable ouvrant le nouvel outil, sans touche attribuée automatiquement.
+
+## 1.1.3 — Outil Cote indépendant
+
+- Bouton Cote entre Draw et Erase. Retiré de la liste des styles de Draw. Deux clics terminent chaque cote.
+- Sélectionner une cote pour modifier Taille de police et Taille des flèches à droite. Valider par Entrée ou Appliquer la cote.
+- Réglages également disponibles pour les nouvelles cotes dans l’outil Cote. Taille de police de 4 à 256, calculs acceptés, sauvegarde et exports PNG/SVG compris.
+- Anciennes cotes : police 12 par défaut. Commande configurable sans raccourci attribué automatiquement.
+
+## 1.1.2 — Cotes et extrémités indépendantes
+
+- Draw : deux listes visuelles Début/Fin avec Aucune, Triangle, Diamant, Ronde et Ouverte. Les formes se règlent séparément.
+- Taille des flèches validée par Entrée ou en quittant le champ. Suppression des anciens boutons et cases du panneau.
+- Style Cote dans la liste des traits : double flèche triangulaire, deux barres perpendiculaires et distance centrée en unités du plan, incluse dans PNG/SVG. La distance suit les transformations.
+- Une cote utilise une arête normale : les intersections peuvent la découper en segments, chacun avec sa distance. Revenir à Continu/Long/Court pour personnaliser les extrémités.
+- Compatibilité des anciens styles, sauvegarde et copie des réglages indépendants. Nouvelles commandes configurables sans touche attribuée par défaut.
+
+## 1.1.1 — Sélection individuelle dans les groupes
+
+- Double-clic en sélection : isoler un point, une arête ou une face sans dissocier le groupe.
+- Clics suivants, Ctrl+clic, déplacements et transformations restent individuels jusqu’à la désélection.
+- Échap ou clic dans le vide : retour à la sélection normale des groupes.
 
 ## 1.1.0
 

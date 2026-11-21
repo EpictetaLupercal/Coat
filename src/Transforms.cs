@@ -25,12 +25,14 @@ public static class SelectionTransform
 public partial class EditorCanvas
 {
     public TransformKind Transform { get; set; }
+    private Dictionary<int,V2> originalAnnotations = new();
     private V2 transformPivot;
     private double transformAmount;
-    public V2 SelectionCenter => SelectionTransform.Center(SelectionPoints().Select(id => VertexAt(id).P));
-    public void SetTransform(TransformKind transform) { CancelGesture(); Transform = transform; Host.UpdateInspector(); InvalidateVisual(); Focus(); }
+    public V2 SelectionCenter => SelectionTransform.Center(SelectionPoints().Select(id => VertexAt(id).P).Concat(Plan.Annotations.Where(a => SelectedAnnotations.Contains(a.Id)).Select(a => new V2(a.X,a.Y))));
+    public void SetTransform(TransformKind transform) { if(SelectedAnnotations.Count > 0 && transform != TransformKind.Translation)return; CancelGesture(); Transform = transform; Host.UpdateInspector(); InvalidateVisual(); Focus(); }
     private void BeginTransformDrag()
     {
+        originalAnnotations = Plan.Annotations.Where(a => SelectedAnnotations.Contains(a.Id)).ToDictionary(a => a.Id,a => new V2(a.X,a.Y));
         scaleHandle = null; dragging = true; original = SelectionPoints().ToDictionary(id => id, id => VertexAt(id).P); transformPivot = SelectionTransform.Center(original.Values); transformAmount = Transform == TransformKind.Scale ? 1 : 0;
     }
     private void UpdateTransformDrag(bool shift)
@@ -56,13 +58,17 @@ public partial class EditorCanvas
     }
     public void NormalizeSelection()
     {
+        var annotations = SelectedAnnotations.ToHashSet();
+        bool individual = IndividualSelection, hadFaces = SelectedFaces.Count > 0;
         var track = new GeometryGroup { Id = Plan.NextId++, VertexIds = SelectedVertices.ToList(), EdgeIds = SelectionEdges().ToList() };
         Plan.Groups.Add(track); Plan.Normalize(); Plan.Groups.Remove(track);
-        ClearSelection(); SelectedVertices.UnionWith(track.VertexIds); SelectedEdges.UnionWith(track.EdgeIds); RefreshGeometry(); ExpandGroups();
+        ClearSelection(); IndividualSelection = individual; SelectedAnnotations.UnionWith(annotations); SelectedVertices.UnionWith(track.VertexIds); SelectedEdges.UnionWith(track.EdgeIds); RefreshGeometry();
+        if (individual && hadFaces) SelectedFaces.UnionWith(faces.Where(f => CachedFaceEdges(f).IsSubsetOf(SelectedEdges)).Select(f => f.Key));
+        ExpandGroups();
     }
     private void DrawTransformGuide(DrawingContext dc)
     {
-        if (Tool != EditorTool.Select || Transform == TransformKind.Translation || SelectedAnnotation != null || SelectionPoints().Count == 0) return;
+        if (Tool != EditorTool.Select || Transform == TransformKind.Translation || SelectedAnnotations.Count > 0 || SelectionPoints().Count == 0) return;
         if (Transform == TransformKind.Scale) { DrawScaleHandles(dc); return; }
         var center = Screen(dragging ? transformPivot : SelectionCenter);
         var pen = new Pen(Accent, 1) { DashStyle = DashStyles.Dash };
@@ -90,10 +96,13 @@ public partial class MainWindow
         Canvas.CancelGesture();
         var vertices = Document.Vertices.ToDictionary(v => v.Id);
         var changes = Canvas.SelectionPoints().ToDictionary(id => id, id => transform(vertices[id].P));
-        if (changes.Count == 0 || changes.All(pair => (vertices[pair.Key].P - pair.Value).Length < 1e-9)) return;
-        if (!changes.Values.All(SelectionTransform.Valid)) { Notify(L.T("La transformation dépasse les limites du plan.")); return; }
-        Mutate(() => { foreach (var pair in changes) vertices[pair.Key].P = pair.Value; Canvas.NormalizeSelection(); }); Canvas.Focus();
+        var notes = Document.Annotations.Where(a => Canvas.SelectedAnnotations.Contains(a.Id)).ToDictionary(a => a.Id);
+        var noteChanges = notes.ToDictionary(a => a.Key,a => transform(new V2(a.Value.X,a.Value.Y)));
+        if(changes.Count + noteChanges.Count == 0)return;
+        if (!changes.Values.Concat(noteChanges.Values).All(SelectionTransform.Valid)) { Notify(L.T("La transformation dépasse les limites du plan.")); return; }
+        Mutate(() => { foreach (var pair in changes) vertices[pair.Key].P = pair.Value; foreach(var pair in noteChanges){notes[pair.Key].X=pair.Value.X;notes[pair.Key].Y=pair.Value.Y;} if(changes.Count > 0)Canvas.NormalizeSelection(); }); Canvas.Focus();
     }
+
     private void TransformInspector()
     {
         Heading(L.T("TRANSFORMATIONS"));
@@ -106,12 +115,12 @@ public partial class MainWindow
             button.Content = content; button.Padding = new Thickness(3, 6, 3, 6); button.Margin = new Thickness(0, 0, i == 2 ? 0 : 4, 0); button.ToolTip = labels[i];
             System.Windows.Automation.AutomationProperties.SetName(button, labels[i]);
             if (Canvas.Transform == mode) { button.Background = B("#304E48"); button.BorderBrush = B("#78DCC1"); }
-            button.IsEnabled = Canvas.SelectedAnnotation == null || mode == TransformKind.Translation; buttons.Children.Add(button);
+            button.IsEnabled = Canvas.SelectedAnnotations.Count == 0 || mode == TransformKind.Translation; buttons.Children.Add(button);
         }
         inspector.Children.Add(buttons);
-        bool selected = Canvas.SelectionPoints().Count > 0 || Canvas.SelectedAnnotation != null;
+        bool selected = Canvas.SelectionPoints().Count > 0 || Canvas.SelectedAnnotations.Count > 0;
         if (!selected) { ToolHint(L.T("Sélectionnez des points, arêtes ou zones pour les transformer.")); return; }
-        if (Canvas.Transform == TransformKind.Translation || Canvas.SelectedAnnotation != null)
+        if (Canvas.Transform == TransformKind.Translation || Canvas.SelectedAnnotations.Count > 0)
         {
             var (dx, dy) = AxisFields(L.T("Décalage"), moveXText, moveYText, L.T("Décalage X"), L.T("Décalage Y"));
             dx.TextChanged += (_, _) => moveXText = dx.Text; dy.TextChanged += (_, _) => moveYText = dy.Text;

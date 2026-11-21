@@ -1,4 +1,4 @@
-﻿# Publishing Coat on GitHub
+# Publishing Coat on GitHub
 
 ## Source repository
 
@@ -34,7 +34,7 @@ The current build requires .NET Desktop Runtime 8 (x64) on the user's PC. This r
 
 The README currently links directly to `Coat-1.0.5-Windows-x64.zip` on the `main` branch of `EpictetaLupercal/Coat`. Keep that file available while using this link. If you move the download to a release asset, update the README to the asset's download URL.
 
-Create a GitHub release with tag **v1.1.0** and title **Coat 1.1.0**. Use the matching section from `docs/CHANGELOG-English.md` for the release description. Attach **Coat-1.1.0-Windows-x64.zip** as a release asset.
+Create a GitHub release with tag **v1.2** and title **Coat 1.2**. Use the matching section from `docs/CHANGELOG-English.md` for the release description. Attach **Coat-1.2-Windows-x64.zip** as a release asset.
 
 GitHub automatically generates source-code archives. Those archives are for developers; they do not contain the generated Windows executable. The release asset is the package intended for end users.
 

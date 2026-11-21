@@ -20,9 +20,11 @@ public partial class MainWindow
         void Pattern(FillPattern pattern) { Canvas.GradientMode = false; Canvas.PaintPattern = pattern; if (Canvas.SelectedFaces.Count > 0) Mutate(() => { foreach (string key in Canvas.SelectedFaces) { Document.Fills.TryAdd(key, Canvas.PaintColor); Document.FillPatterns[key] = pattern; Document.Gradients.Remove(key); } }); else { SetTool(EditorTool.Paint); Canvas.PaintLines = false; UpdateInspector(); } }
         switch (id)
         {
+            case "Ignorer les groupes": SetTool(EditorTool.Select); Canvas.ToggleIgnoreGroups(); break;
+            case "Cote": SetTool(EditorTool.Dimension); break;
             case "Dissoudre les sommets": Canvas.DissolveSelection(true); break;
             case "Dissoudre les arêtes": Canvas.DissolveSelection(false); break;
-            case "Jeton": SetTool(EditorTool.Annotation); Canvas.PlaceTokens = true; UpdateInspector(); break;
+            case "Jeton": SetTool(EditorTool.Token); break;
             case "Dégradé": case "Remplissage": SetTool(EditorTool.Paint); Canvas.PaintLines = false; Canvas.GradientMode = id == "Dégradé"; UpdateInspector(); break;
             case "Confirmer": Canvas.ConfirmGesture(); break;
             case "Rectangle": Shape(ShapeKind.Rectangle); break;
@@ -41,8 +43,9 @@ public partial class MainWindow
             case "Remplir une zone": case "Colorer les lignes": SetTool(EditorTool.Paint); Canvas.PaintLines = id == "Colorer les lignes"; UpdateInspector(); break;
             case "Sélection sur plusieurs niveaux": Canvas.SelectAcrossLevels = !Canvas.SelectAcrossLevels; UpdateInspector(); break;
             case "Définir la couleur des murs": SetWallColor(Canvas.PaintColor); break;
-            case "Couleur des murs…": ChooseColor(Document.WallColor, SetWallColor); break;
-            case "◉  Roue de couleurs…": ChooseColor(Canvas.PaintColor, color => { Canvas.PaintColor = color; UpdateInspector(); }); break;
+            case "Utiliser cette couleur": ChooseColor(Canvas.PaintColor, value => Canvas.PaintColor=value); ActiveColorPicker?.HexInput.Focus(); break;
+            case "Couleur des murs…": ChooseColor(Document.WallColor, value => Document.WallColor=value); break;
+            case "◉  Roue de couleurs…": ChooseColor(Canvas.PaintColor, color => Canvas.PaintColor = color); break;
             case "Organisation": ShowOrganization(); break;
             case "Sélectionner le groupe suivant":
                 var groups = Document.Groups; if (groups.Count == 0) break;

@@ -109,6 +109,14 @@ public static class SelfTests
         Update107Tests.Run(window, Check, output);
         Update108Tests.Run(window, Check, output);
         Update110Tests.Run(window, Check, output);
+        Update111Tests.Run(window, Check);
+        Update112Tests.Run(window, Check, output);
+        Update113Tests.Run(window, Check, output);
+        Update114Tests.Run(window, Check, output);
+        Update115Tests.Run(window, Check, output);
+        Update116Tests.Run(window, Check, output);
+        Update117Tests.Run(window, Check, output);
+        Update120Tests.Run(window, Check, output);
         window.Close(); app.Shutdown();
         File.WriteAllLines(Path.Combine(output, "results.txt"), results.Append($"\n{results.Count} checks passed."));
     }

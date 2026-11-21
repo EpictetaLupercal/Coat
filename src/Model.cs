@@ -34,7 +34,12 @@ public class Edge
     public bool ArrowEnd { get; set; }
     public ArrowKind ArrowStyle { get; set; }
     public double ArrowSize { get; set; } = 16;
-    public void CopyArrows(Edge source) { ArrowStart = source.ArrowStart; ArrowEnd = source.ArrowEnd; ArrowStyle = source.ArrowStyle; ArrowSize = source.ArrowSize; }
+    public ArrowKind? StartArrowStyle { get; set; }
+    public ArrowKind? EndArrowStyle { get; set; }
+    public bool Dimension { get; set; }
+    public double DimensionFontSize { get; set; } = 12;
+    public ArrowKind HeadStyle(bool start) => (start ? StartArrowStyle : EndArrowStyle) ?? ArrowStyle;
+    public void CopyArrows(Edge source) { ArrowStart = source.ArrowStart; ArrowEnd = source.ArrowEnd; ArrowStyle = source.ArrowStyle; ArrowSize = source.ArrowSize; StartArrowStyle = source.StartArrowStyle; EndArrowStyle = source.EndArrowStyle; Dimension = source.Dimension; DimensionFontSize = source.DimensionFontSize; }
 }
 public class ReferenceImage
 {
@@ -208,7 +213,7 @@ public partial class Plan
             for (int i = 0; i + 1 < on.Count; i++)
             {
                 var key = (Math.Min(on[i].Id, on[i + 1].Id), Math.Max(on[i].Id, on[i + 1].Id));
-                if (!edgesByEndpoints.TryGetValue(key, out var existing)) { existing = new Edge { Id = i == 0 ? edge.Id : NextId++, A = on[i].Id, B = on[i + 1].Id, Color = edge.Color, Style = edge.Style, ArrowStyle = edge.ArrowStyle, ArrowSize = edge.ArrowSize, ArrowStart = edge.ArrowStart && on[i].Id == edge.A, ArrowEnd = edge.ArrowEnd && on[i + 1].Id == edge.B }; Edges.Add(existing); edgesByEndpoints.Add(key, existing); }
+                if (!edgesByEndpoints.TryGetValue(key, out var existing)) { existing = new Edge { Id = i == 0 ? edge.Id : NextId++, A = on[i].Id, B = on[i + 1].Id, Color = edge.Color, Style = edge.Style, ArrowStyle = edge.ArrowStyle, StartArrowStyle = edge.StartArrowStyle, EndArrowStyle = edge.EndArrowStyle, Dimension = edge.Dimension, DimensionFontSize = edge.DimensionFontSize, ArrowSize = edge.ArrowSize, ArrowStart = edge.ArrowStart && on[i].Id == edge.A, ArrowEnd = edge.ArrowEnd && on[i + 1].Id == edge.B }; Edges.Add(existing); edgesByEndpoints.Add(key, existing); }
                 edgeMap[edge.Id].Add(existing.Id);
             }
         }

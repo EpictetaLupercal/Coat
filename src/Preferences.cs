@@ -18,7 +18,7 @@ public record ShortcutAction(string Label, Shortcut Command, Shortcut Default)
     {
         "Nouveau" or "Ouvrir" or "Enregistrer" or "Enregistrer sous" or "Importer une image" or "Exporter en PNG…" or "Exporter en SVG…" or "Exporter en .map…" or "Quitter" or "Charger le plan d’exemple" or "Ouvert récemment" or "Effacer la liste" => "Fichiers",
         "Sélection" or "Dessin" or "Gomme" or "Coloriage" or "Shapes" or "Annotations" or "Rectangle" or "Cercle" or "Escaliers droits" or "Escaliers en L" or "Escaliers en U" or "Escaliers en colimaçon" or "Aucun outil" => "Outils",
-        "Sélection de points" or "Sélection d’arêtes" or "Sélection de zones" or "Translation" or "Rotation" or "Échelle" or "Sélection sur plusieurs niveaux" or "Organisation" or "Renommer le groupe" or "Sélectionner le groupe suivant" => "Sélection et transformations",
+        "Sélection de points" or "Sélection d’arêtes" or "Sélection de zones" or "Translation" or "Rotation" or "Échelle" or "Sélection sur plusieurs niveaux" or "Ignorer les groupes" or "Organisation" or "Renommer le groupe" or "Sélectionner le groupe suivant" => "Sélection et transformations",
         "Aide" or "Préférences" => "Interface",
         _ when Label.StartsWith("Vue ") || Label.StartsWith("Niveau") || Label is "Cadrer" or "Grille visible" or "Longueurs visibles" => "Navigation et affichage",
         _ => "Édition"
@@ -27,7 +27,7 @@ public record ShortcutAction(string Label, Shortcut Command, Shortcut Default)
 public class ShortcutSettings
 {
     internal static readonly string[] FeatureLabels = {
-        "Dissoudre les sommets", "Dissoudre les arêtes", "Jeton", "Dégradé", "Remplissage", "Double flèche", "Appliquer les flèches", "Appliquer le dégradé",
+        "Ignorer les groupes", "Dissoudre les sommets", "Dissoudre les arêtes", "Cote", "Appliquer la cote", "Utiliser les réglages du jeton", "Ronde", "Jeton", "Dégradé", "Remplissage", "Double flèche", "Appliquer les flèches", "Appliquer le dégradé",
         "Accrochage : sommets, milieux et grille", "Flèche au début", "Flèche à la fin", "Triangle", "Ouverte", "Diamant", "Couleur de fin…", "Appliquer le jeton", "Supprimer le jeton",
         "Exporter en PNG…", "Exporter en SVG…", "Exporter en .map…", "Charger le plan d’exemple", "Quitter", "Revenir à l’origine", "À propos de Coat",
         "Supprimer ce niveau", "Appliquer la hauteur", "Affecter", "Sélection sur plusieurs niveaux", "Organisation", "Renommer le groupe", "Sélectionner le groupe suivant",
@@ -129,7 +129,7 @@ public partial class MainWindow
         foreach (var (tool, button) in toolButtons)
         {
             var key = tool switch { EditorTool.Select => Key.V, EditorTool.Draw => Key.D, EditorTool.Erase => Key.E, EditorTool.Paint => Key.C, EditorTool.Shapes => Key.R, EditorTool.Annotation => Key.T, _ => Key.None };
-            button.ToolTip = CurrentHint(new(key, ModifierKeys.None));
+            button.ToolTip = tool == EditorTool.Token ? L.T("Jetons") + (Shortcuts.Bindings["Jeton"].Key == Key.None ? "" : " · " + Shortcuts.Bindings["Jeton"]) : tool == EditorTool.Dimension ? L.T("Cote") + (Shortcuts.Bindings["Cote"].Key == Key.None ? "" : " · " + Shortcuts.Bindings["Cote"]) : CurrentHint(new(key, ModifierKeys.None));
         }
         foreach (var pair in featureMenus) { var key = Shortcuts.Bindings[pair.Value]; pair.Key.InputGestureText = key.Key == Key.None ? "" : key.ToString(); }
         UpdateStatus();

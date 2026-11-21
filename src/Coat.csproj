@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Coat</AssemblyName>
     <RootNamespace>Coat</RootNamespace>
-    <Version>1.1.0</Version>
+    <Version>1.2</Version>
     <Authors>Epicteta Lupercal</Authors>
     <Company>Epicteta Lupercal</Company>
     <Copyright>Epicteta Lupercal</Copyright>

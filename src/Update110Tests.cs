@@ -42,7 +42,7 @@ internal static class Update110Tests
         parts=MapExporter.Build(hole); check(parts.Count==4 && parts.Sum(b=>MapExporter.Area(b.Outline))==196608 && parts.All(b=>!Plan.Inside(new(256,256),b.Outline)),"Hole exports four convex walls with an empty center");
         File.WriteAllText(Path.Combine(fixtures,"hole.map"),MapExporter.Export(hole).Text); Update12Tests.CheckPlanes(MapExporter.Export(hole).Text,check);
         w.LoadDocument(hole,""); w.SetTool(EditorTool.Paint); w.Canvas.ShowGrid=false; w.Canvas.Fit(); w.UpdateLayout(); Pump();
-        check(w.Title.StartsWith(AppVersion.Title) && AppVersion.Number=="1.1.0","Title takes version 1.1.0 from assembly project metadata");
+        check(w.Title.StartsWith(AppVersion.Title),"Title takes version from assembly project metadata");
         check(w.Canvas.FillContains(outer,new(64,64)) && !w.Canvas.FillContains(outer,new(256,256)),"Outer canvas fill excludes an enclosed unfilled shape");
         var svg=XDocument.Parse(MainWindow.Svg(hole)); check(svg.Descendants().Any(e=>e.Name.LocalName=="path" && (string?)e.Attribute("fill-rule")=="evenodd" && e.Attribute("d")!.Value.Split('M').Length==3),"SVG uses an even-odd compound clipping contour");
         w.ExportPngTo(Path.Combine(output,"coat-110-hole.png")); MainWindow.SaveVisual((FrameworkElement)w.Content,Path.Combine(output,"coat-110-fill.png"));

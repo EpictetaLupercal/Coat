@@ -32,7 +32,8 @@ internal static class Update13Tests
         File.WriteAllText(Path.Combine(output,"Example-Map.map"),result.Text);
         File.WriteAllText(Path.Combine(output,"Example-Map.coat"),p.Serialize());
         p = new Plan(); Rect(p,0,0,64,64,"#112233"); Rect(p,64,0,64,64,"#667788");
-        check(MapExporter.Build(p).Count == 1 && MapExporter.Build(p).Single().Surface == MapSurface.Floor && Area(MapExporter.Build(p)) == 8192, "Adjacent differently colored floors merge into a rectangular slab");
+        brushes = MapExporter.Build(p);
+        check(brushes.Count == 2 && brushes.All(b => b.Surface == MapSurface.Floor) && brushes.Select(b => b.Color).Distinct().Count() == 2 && Area(brushes) == 8192, "Adjacent differently colored floors retain separate rectangular slabs");
         p.WallColor = "#112233"; brushes = MapExporter.Build(p);
         check(brushes.Count == 2 && brushes.Count(b => b.Surface == MapSurface.Wall) == 1 && brushes.Count(b => b.Surface == MapSurface.Floor) == 1, "Custom wall color determines classification while all other fills remain floors");
         p = new Plan(); Rect(p,0,0,256,256,"#445566"); Rect(p,64,64,128,128,"#FFFFFF");

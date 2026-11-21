@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -49,12 +49,9 @@ public partial class MainWindow
     internal Plan CaptureSelection()
     {
         var fragment = new Plan { Grid = Document.Grid };
-        int baseLevel = Canvas.SelectionPoints().Select(id => Document.Get(id).Level).DefaultIfEmpty(Document.ActiveLevel).Min();
-        if (Canvas.SelectedAnnotation is int noteId)
-        {
-            var note = Document.Annotations.First(a => a.Id == noteId);
-            fragment.Annotations.Add(CloneNote(note, fragment.NextId++, new V2(), 0)); return fragment;
-        }
+        var selectedNotes = Document.Annotations.Where(a => Canvas.SelectedAnnotations.Contains(a.Id)).ToList();
+        int baseLevel = Canvas.SelectionPoints().Select(id => Document.Get(id).Level).Concat(selectedNotes.Select(a => a.Level)).DefaultIfEmpty(Document.ActiveLevel).Min();
+        foreach(var note in selectedNotes){fragment.EnsureLevel(note.Level);fragment.Annotations.Add(CloneNote(note,fragment.NextId++,new V2(),note.Level));}
         fragment.ActiveLevel = baseLevel; fragment.EnsureLevel(baseLevel);
         var points = Canvas.SelectionPoints();
         // In point mode, include edges joining selected points. In edge/face mode, copy only selected edges.
@@ -74,7 +71,7 @@ public partial class MainWindow
         return fragment;
     }
     private static Annotation CloneNote(Annotation note, int id, V2 offset, int level) => new()
-    { Id = id, X = note.X + offset.X, Y = note.Y + offset.Y, Text = note.Text, Size = note.Size, Color = note.Color, Level = level, IsToken = note.IsToken };
+    { Id = id, X = note.X + offset.X, Y = note.Y + offset.Y, Text = note.Text, Size = note.Size, Color = note.Color, Level = level, IsToken = note.IsToken, TokenShape = note.TokenShape };
     private static void CopyFaceStyles(Plan source, Plan target, IReadOnlyDictionary<int, int> map, HashSet<int> edges)
     {
         foreach (var face in source.Faces().Where(f => source.FaceEdges(f).IsSubsetOf(edges) && f.Vertices.All(map.ContainsKey)))
@@ -116,7 +113,7 @@ public partial class MainWindow
         { Notify(L.T("Le collage dépasse les limites du plan.")); return; }
         if (fragment.Vertices.Select(v => v.Level).Concat(fragment.Annotations.Select(a => a.Level)).Any(level => level - fragment.ActiveLevel + Document.ActiveLevel < -999 || level - fragment.ActiveLevel + Document.ActiveLevel > 999)) { Notify(L.T("Le collage dépasse les limites du plan.")); return; }
         SetTool(EditorTool.Select);
-        if (fragment.Vertices.Select(v => v.Level).Distinct().Count() > 1) { Canvas.SelectAcrossLevels = true; Canvas.ShowUpperLevels = true; upperLevelsMenu.IsChecked = true; }
+        if (fragment.Vertices.Select(v => v.Level).Concat(fragment.Annotations.Select(a => a.Level)).Distinct().Count() > 1) { Canvas.SelectAcrossLevels = true; Canvas.ShowUpperLevels = Canvas.ShowLowerLevels = true; upperLevelsMenu.IsChecked = lowerLevelsMenu.IsChecked = true; }
         var previousMode = Canvas.Mode;
         if (fragment.Vertices.Count > 0 && fragment.Edges.Count == 0) Canvas.Mode = previousMode = SelectionMode.Vertex;
         else if (previousMode == SelectionMode.Face && fragment.Faces().Count == 0) Canvas.Mode = previousMode = SelectionMode.Edge;
@@ -140,7 +137,7 @@ public partial class MainWindow
             else Canvas.SelectedEdges.UnionWith(tracking.EdgeIds);
             foreach (var note in fragment.Annotations)
             {
-                var pasted = CloneNote(note, Document.NextId++, offset, Document.ActiveLevel); Document.Annotations.Add(pasted); Canvas.SelectedAnnotation = pasted.Id;
+                var pasted = CloneNote(note, Document.NextId++, offset, Document.ActiveLevel + note.Level - fragment.ActiveLevel); Document.EnsureLevel(pasted.Level); Document.Annotations.Add(pasted); Canvas.SelectedAnnotations.Add(pasted.Id);
             }
             Canvas.RefreshGeometry(); Canvas.ExpandGroups();
         });

@@ -28,12 +28,13 @@ public partial class Plan
 }
 
 public enum MapSurface { Empty, Wall, Floor }
-public record MapBrush(int Level, double Bottom, double Top, List<V2> Outline, MapSurface Surface = MapSurface.Wall);
+public record MapBrush(int Level, double Bottom, double Top, List<V2> Outline, MapSurface Surface = MapSurface.Wall, string Color = "#FFFFFF");
 public sealed record MapExportResult(string Text, int BrushCount);
 public static partial class MapExporter
 {
     public const double FloorThickness = 16;
-    private record Region(Face Face, List<V2> Points, MapSurface Surface);
+    private readonly record struct Material(MapSurface Surface, string? Color);
+    private record Region(Face Face, List<V2> Points, Material Material);
     private record Crossing(double X, int Region, V2 A, V2 B)
     {
         public double At(double y) => A.X + (B.X - A.X) * ((y - A.Y) / (B.Y - A.Y));
@@ -47,28 +48,34 @@ public static partial class MapExporter
         var wallColor = ColorMath.Hex(ParseColor(plan.WallColor));
         foreach (var level in plan.Levels.Order())
         {
-            var regions = faces.Where(f => f.Level == level).Select(f => new Region(f, f.Vertices.Select(id => vertices[id]).ToList(),
-                !plan.Fills.TryGetValue(f.Key, out var color) ? MapSurface.Empty :
-                ColorMath.TryHex(color, out var rgb) && ColorMath.Hex(rgb) == wallColor ? MapSurface.Wall : MapSurface.Floor)).ToList();
-            if (!regions.Any(r => r.Surface != MapSurface.Empty)) continue;
+            var regions = faces.Where(f => f.Level == level).Select(f =>
+            {
+                // Color is part of material identity, not just a wall/floor classifier.
+                // Canonical RGB also keeps differently cased legacy hex values compatible.
+                var color = plan.Fills.TryGetValue(f.Key, out var fill) ? ColorMath.Hex(ParseColor(fill)) : null;
+                return new Region(f, f.Vertices.Select(id => vertices[id]).ToList(),
+                    new(color == null ? MapSurface.Empty : color == wallColor ? MapSurface.Wall : MapSurface.Floor, color));
+            }).ToList();
+            if (!regions.Any(r => r.Material.Surface != MapSurface.Empty)) continue;
             double bottom = plan.LevelZ(level), top = plan.WallTop(level);
-            if (regions.Any(r => r.Surface == MapSurface.Wall) && (!double.IsFinite(top) || top <= bottom + 1e-6))
+            if (regions.Any(r => r.Material.Surface == MapSurface.Wall) && (!double.IsFinite(top) || top <= bottom + 1e-6))
                 throw new InvalidDataException(L.F($"Niveau {level} : le haut du mur ({top:0.###}) doit être supérieur à sa base ({bottom:0.###}). Corrigez les hauteurs Z des niveaux."));
             // Convex source contours with no enclosed face bypass the slab decomposition.
             // Their vertices already include all editor transforms, including ellipse scaling.
             var direct = new HashSet<string>();
-            foreach (var region in regions.Where(r => r.Surface != MapSurface.Empty && contours.Holes[r.Face.Key].Count == 0))
+            foreach (var region in regions.Where(r => r.Material.Surface != MapSurface.Empty && contours.Holes[r.Face.Key].Count == 0))
             {
                 var outline = Clean(region.Points.ToList());
                 if (!Convex(outline)) continue;
                 direct.Add(region.Face.Key);
-                brushes.Add(region.Surface == MapSurface.Wall ? new(level, bottom, top, outline, region.Surface) : new(level, bottom - FloorThickness, bottom, outline, region.Surface));
+                var material = region.Material;
+                brushes.Add(material.Surface == MapSurface.Wall ? new(level, bottom, top, outline, material.Surface, material.Color!) : new(level, bottom - FloorThickness, bottom, outline, material.Surface, material.Color!));
             }
-            if (regions.All(r => r.Surface == MapSurface.Empty || direct.Contains(r.Face.Key))) continue;
+            if (regions.All(r => r.Material.Surface == MapSurface.Empty || direct.Contains(r.Face.Key))) continue;
             // Horizontal slabs yield rectangles for orthogonal contours and convex trapezoids for diagonals.
             // Even/odd crossings also handle repeated bridge edges, concavity and enclosed openings.
             var ys = regions.SelectMany(r => r.Points.Select(p => p.Y)).Distinct().Order().ToArray();
-            var previousRectangles = new Dictionary<(double, double, MapSurface), MapBrush>();
+            var previousRectangles = new Dictionary<(double, double, Material), MapBrush>();
             for (int row = 0; row + 1 < ys.Length; row++)
             {
                 double y0 = ys[row], y1 = ys[row + 1], mid = (y0 + y1) / 2;
@@ -85,23 +92,25 @@ public static partial class MapExporter
                     }
                 }
                 crossings.Sort((a, b) => a.X.CompareTo(b.X));
-                var inside = new HashSet<int>(); Crossing? start = null; var current = MapSurface.Empty;
-                var nextRectangles = new Dictionary<(double, double, MapSurface), MapBrush>();
+                var inside = new HashSet<int>(); Crossing? start = null; var current = default(Material);
+                var nextRectangles = new Dictionary<(double, double, Material), MapBrush>();
                 for (int i = 0; i < crossings.Count;)
                 {
                     var boundary = crossings[i]; int j = i;
                     do { if (!inside.Add(crossings[j].Region)) inside.Remove(crossings[j].Region); j++; }
                     while (j < crossings.Count && Math.Abs(crossings[j].X - boundary.X) < 1e-8);
-                    // The innermost face owns the cell: empty faces cut holes; color chooses wall or floor.
+                    // The innermost face owns the cell, even when it shares the outer
+                    // surface type. Empty faces cut holes; direct brushes already own
+                    // their footprint. Thus no nested solid is exported twice.
                     int owner = inside.OrderBy(r => regions[r].Face.Area).ThenBy(r => r).DefaultIfEmpty(-1).First();
-                    var next = owner >= 0 && j < crossings.Count && !direct.Contains(regions[owner].Face.Key) ? regions[owner].Surface : MapSurface.Empty;
+                    var next = owner >= 0 && j < crossings.Count && !direct.Contains(regions[owner].Face.Key) ? regions[owner].Material : default;
                     if (next != current && start != null)
                     {
                         var outline = Clean(new() { new(start.At(y0), y0), new(boundary.At(y0), y0), new(boundary.At(y1), y1), new(start.At(y1), y1) });
                         if (outline.Count >= 3 && Area(outline) > 1e-8)
                         {
-                            var brush = current == MapSurface.Wall ? new MapBrush(level, bottom, top, outline, current) :
-                                new MapBrush(level, bottom - FloorThickness, bottom, outline, current);
+                            var brush = current.Surface == MapSurface.Wall ? new MapBrush(level, bottom, top, outline, current.Surface, current.Color!) :
+                                new MapBrush(level, bottom - FloorThickness, bottom, outline, current.Surface, current.Color!);
                             bool rectangle = outline.Count == 4 && outline[0].X == outline[3].X && outline[1].X == outline[2].X;
                             if (rectangle)
                             {
@@ -115,7 +124,7 @@ public static partial class MapExporter
                         }
                         start = null;
                     }
-                    if (next != MapSurface.Empty && start == null) start = boundary;
+                    if (next.Surface != MapSurface.Empty && start == null) start = boundary;
                     current = next;
                     i = j;
                 }
@@ -137,7 +146,7 @@ public static partial class MapExporter
         foreach (var brush in brushes)
         {
             var p = brush.Outline; double z = brush.Bottom, top = brush.Top;
-            text.AppendLine($"// Coat {brush.Surface.ToString().ToLowerInvariant()} - level {brush.Level}: Z {F(z)} to {F(top)}").AppendLine("{");
+            text.AppendLine($"// Coat {brush.Surface.ToString().ToLowerInvariant()} - level {brush.Level}: Z {F(z)} to {F(top)} - color {brush.Color}").AppendLine("{");
             // .map point order faces inward (the format uses the opposite cross-product convention).
             Plane(P(p[0], z), P(p[1], z), P(p[2], z), "1 0 0", "0 -1 0");
             Plane(P(p[2], top), P(p[1], top), P(p[0], top), "1 0 0", "0 -1 0");
@@ -183,8 +192,8 @@ public partial class MainWindow
     private void WallColorControls()
     {
         Divider(); Heading(L.T("EXPORT .MAP"));
-        var color = Button(L.T("Couleur des murs…"), () => ChooseColor(Document.WallColor, SetWallColor));
-        color.ToolTip = Document.WallColor; inspector.Children.Add(color);
+        var color = ColorButton(() => Document.WallColor, value => Document.WallColor = value, "Couleur des murs…");
+        inspector.Children.Add(color);
         var line = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 7, 0, 7) };
         line.Children.Add(new Border { Width = 18, Height = 18, Background = B(Document.WallColor), BorderBrush = B("#96A7BC"), BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 8, 0) });
         line.Children.Add(new TextBlock { Text = Document.WallColor }); inspector.Children.Add(line);

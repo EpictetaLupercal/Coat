@@ -38,7 +38,7 @@ internal static class Update108Tests
         w.LoadDocument(Rectangle(), ""); w.SetTool(EditorTool.Select); c.Mode=SelectionMode.Edge; c.SelectAll(); c.Transform=TransformKind.Translation; w.UpdateInspector(); w.UpdateLayout(); Pump();
         var dx=Desc<TextBox>(w).Single(t=>AutomationProperties.GetName(t)=="Offset X"); var dy=Desc<TextBox>(w).Single(t=>AutomationProperties.GetName(t)=="Offset Y");
         check(Math.Abs(dx.TranslatePoint(new Point(),w).Y-dy.TranslatePoint(new Point(),w).Y)<1 && dx.TranslatePoint(new Point(),w).X<dy.TranslatePoint(new Point(),w).X, "Move offset X and Y share one compact row");
-        check(!Desc<CheckBox>(w).Any(b=>Equals(b.Content,"Arrow Start")), "Select no longer contains arrow options");
+        check(!Desc<ComboBox>(w).Any(b=>AutomationProperties.GetName(b)=="Arrow Start"), "Select no longer contains arrow options");
         MainWindow.SaveVisual((FrameworkElement)w.Content, Path.Combine(output,"coat-108-select.png"));
         c.SetTransform(TransformKind.Scale); c.Zoom=2; c.Center=new(64,48); w.UpdateLayout(); Pump();
         check(c.ScaleHandles().Count==8,"Scale gizmo exposes side and corner handles");
@@ -60,7 +60,7 @@ internal static class Update108Tests
         check(Math.Abs(sx.TranslatePoint(new Point(),w).Y-sy.TranslatePoint(new Point(),w).Y)<1,"Independent scale factors share one compact row");
         MainWindow.SaveVisual((FrameworkElement)w.Content,Path.Combine(output,"coat-108-scale.png"));
         w.SetTool(EditorTool.Draw); w.UpdateLayout(); Pump();
-        check(Desc<CheckBox>(w).Any(b=>Equals(b.Content,"Arrow Start")) && Desc<ComboBox>(w).Any(b=>AutomationProperties.GetName(b)=="LINE STYLE"),"Draw contains arrow controls and the visual line-style dropdown");
+        check(Desc<ComboBox>(w).Any(b=>AutomationProperties.GetName(b)=="Arrow Start") && Desc<ComboBox>(w).Any(b=>AutomationProperties.GetName(b)=="LINE STYLE"),"Draw contains arrow controls and the visual line-style dropdown");
         w.ExecuteFeature("Double flèche"); check(w.Document.Edges.All(e=>e.ArrowStart && e.ArrowEnd),"Draw arrow settings also edit previously selected edges");
         c.ClearSelection(); w.UpdateInspector(); c.DrawAppearance.Style=LineStyle.LongDash; c.DrawAppearance.ArrowStyle=ArrowKind.Open; c.DrawAppearance.ArrowSize=20;
         c.PointerDown(c.Screen(new(-128,-64)),MouseButton.Left); c.PointerUp(MouseButton.Left); c.PointerDown(c.Screen(new(128,-64)),MouseButton.Left); c.PointerUp(MouseButton.Left);

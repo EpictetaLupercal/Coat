@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
@@ -99,7 +99,7 @@ internal static class Update106Tests
         renderPlan.Annotations.Add(new Annotation { Id = renderPlan.NextId++, Text = "First\nSecond", Level = 0 }); canvas.RefreshGeometry(); canvas.SelectedAnnotation = renderPlan.Annotations.Single().Id; window.SetTool(EditorTool.Annotation); window.UpdateLayout(); Pump();
         var multiline = Desc<TextBox>(window).Single(t => t.AcceptsReturn); string noteBefore = renderPlan.Annotations.Single().Text;
         var enter = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(multiline), 0, Key.Enter) { RoutedEvent = Keyboard.PreviewKeyDownEvent }; multiline.RaiseEvent(enter);
-        check(!enter.Handled && renderPlan.Annotations.Single().Text == noteBefore, "Multiline Enter is left to the text editor and never applies the annotation");
+        check(enter.Handled && renderPlan.Annotations.Single().Text == noteBefore, "Enter confirms annotation editing without appending a line break");
         window.LoadDocument(new Plan(), Path.Combine(output, "view-入口-é.coat")); canvas.Center = new(123.5, -456.25); canvas.Zoom = .75; canvas.ShowGrid = false; canvas.ShowLengths = true; canvas.ShowLowerLevels = false; canvas.ShowUpperLevels = true; canvas.SelectAcrossLevels = true;
         check(window.Save(), "Save captures the complete project view");
         window.LoadDocument(new Plan(), ""); window.OpenPath(Path.Combine(output, "view-入口-é.coat"));

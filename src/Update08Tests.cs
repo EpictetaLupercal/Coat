@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -57,55 +57,24 @@ internal static class Update08Tests
         check(window.SavedColors.Colors[0] == "#448855", "Wheel plus reuses a slot freed through the context menu");
         picker.UpdateLayout(); Pump(); MainWindow.SaveVisual(picker, Path.Combine(output, "coat-08-roue.png"));
 
-        // Exercise the actual canvas rendering and modal pipette path without moving the user's cursor.
-        var point = window.Canvas.PointToScreen(new Point(20, 50));
-        var screen = ColorSampling.FromVisual(window.Canvas);
-        check(screen.Bitmap.PixelWidth > 0 && screen.TryColor(point, out _), "Pipette renders the visible canvas at its screen DPI and can address a plan pixel");
-        screen.TryColor(point, out var expected);
-        bool timedOut = false;
-        var watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-        watchdog.Tick += (_, _) => { timedOut = true; foreach (var overlay in Application.Current.Windows.OfType<CanvasColorPicker>().ToArray()) overlay.Close(); };
-        watchdog.Start();
-        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => Application.Current.Windows.OfType<CanvasColorPicker>().Single().PickAt(point)));
-        Desc<Button>(picker).Single(b => AutomationProperties.GetName(b) == "Pipette").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        check(picker.SelectedHex == ColorMath.Hex(expected) && !Application.Current.Windows.OfType<CanvasColorPicker>().Any(), "Pipette selects an actual rendered plan pixel and returns to the wheel");
-        string previous = picker.SelectedHex;
-        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
-        {
-            var overlay = Application.Current.Windows.OfType<CanvasColorPicker>().Single();
-            overlay.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(overlay), 0, Key.Escape) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
-        }));
-        Desc<Button>(picker).Single(b => AutomationProperties.GetName(b) == "Pipette").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        check(picker.SelectedHex == previous && !Application.Current.Windows.OfType<CanvasColorPicker>().Any(), "Escape cancels pipette sampling without changing the chosen color");
-        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
-        {
-            var overlay = Application.Current.Windows.OfType<CanvasColorPicker>().Single();
-            overlay.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Right) { RoutedEvent = UIElement.MouseRightButtonDownEvent });
-        }));
-        Desc<Button>(picker).Single(b => AutomationProperties.GetName(b) == "Pipette").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        check(picker.SelectedHex == previous && !Application.Current.Windows.OfType<CanvasColorPicker>().Any(), "Right-click cancels the pipette and closes its overlay");
-        picker.Close();
-        check(window.SavedColors.Colors[0] == "#448855", "Explicitly saved palette changes survive cancelling the color dialog");
+        // Sample directly on the editor canvas; no modal or overlay window is created.
+        var point=window.Canvas.PointToScreen(new Point(20,50));var screen=ColorSampling.FromVisual(window.Canvas);
+        check(screen.Bitmap.PixelWidth>0&&screen.TryColor(point,out _),"Pipette captures the visible plan at its DPI");screen.TryColor(point,out var expected);
+        Desc<Button>(picker).Single(b=>AutomationProperties.GetName(b)=="Pipette").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        check(window.Canvas.IsColorSampling,"Pipette enters canvas sampling mode without a window");window.Canvas.SampleColorAt(point);
+        check(picker.SelectedHex==ColorMath.Hex(expected)&&!window.Canvas.IsColorSampling,"Pipette samples the actual plan and returns to the popup");
+        string previous=picker.SelectedHex;
+        Desc<Button>(picker).Single(b=>AutomationProperties.GetName(b)=="Pipette").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));window.Canvas.CancelColorSampling();
+        check(picker.SelectedHex==previous&&!window.Canvas.IsColorSampling,"Cancelling the pipette retains the previous color");
+        Desc<Button>(picker).Single(b=>AutomationProperties.GetName(b)=="Pipette").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        window.Canvas.PointerDown(new Point(20,50),MouseButton.Right);
+        check(picker.SelectedHex==previous&&!window.Canvas.IsColorSampling,"Right-click cancels sampling on the canvas");picker.Close();
+        check(window.SavedColors.Colors[0]=="#448855","Saved colors survive closing the live popup");
         sidebar.Children.OfType<Button>().First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        check(window.Canvas.PaintColor == "#448855", "Saved sidebar colors can be selected for painting");
-        sidebar = Desc<PaletteView>(window).Single();
+        check(window.Canvas.PaintColor=="#448855","Saved sidebar colors can be selected for painting");sidebar=Desc<PaletteView>(window).Single();
         ((MenuItem)sidebar.Children.OfType<Button>().First().ContextMenu.Items[0]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-        check(window.Canvas.PaintColor == "#448855" && window.SavedColors.Colors[0] == null, "Deleting a saved swatch leaves the active paint color unchanged");
-        var modal = new ColorPicker(window, "#123456");
-        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
-        {
-            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
-            {
-                var overlay = Application.Current.Windows.OfType<CanvasColorPicker>().Single();
-                MainWindow.SaveVisual((FrameworkElement)overlay.Content, Path.Combine(output, "coat-08-pipette.png"));
-                overlay.PickAt(point);
-            }));
-            Desc<Button>(modal).Single(b => AutomationProperties.GetName(b) == "Pipette").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Desc<Button>(modal).Single(b => b.Content as string == "Utiliser cette couleur").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        }));
-        check(modal.ShowDialog() == true && modal.SelectedHex == ColorMath.Hex(expected), "Pipette works inside the modal wheel and returns its chosen color for application");
-        watchdog.Stop();
-        check(!timedOut && window.IsEnabled, "Pipette selection and cancellation finish promptly and restore the editor input");
+        check(window.Canvas.PaintColor=="#448855"&&window.SavedColors.Colors[0]==null,"Deleting a swatch leaves active paint color unchanged");
+        check(window.IsEnabled,"Color popup and pipette keep the editor enabled");
         var bitmap = BitmapSource.Create(2, 1, 96, 96, PixelFormats.Bgr32, null, new byte[] { 3, 2, 1, 0, 6, 5, 4, 0 }, 8);
         var negative = new ScreenFrame(bitmap, -1920, -200);
         check(negative.TryColor(new(-1919, -200), out var sampled) && sampled == Color.FromRgb(4, 5, 6) && !negative.TryColor(new(-1918, -200), out _) && !negative.TryColor(new(-1921, -200), out _), "Pipette sampling handles negative desktop coordinates and rejects pixels outside the frame");

@@ -32,7 +32,7 @@ public partial class EditorCanvas
         if (cache) target.DrawRectangle(navigationBrush, null, navigationBounds); else target.DrawDrawing(cachedScene);
         target.Pop();
     }
-    private HashSet<int> sceneVertices = new(), sceneEdges = new();
+    private HashSet<int> sceneVertices = new(), sceneEdges = new(), sceneAnnotations = new();
     private HashSet<string> sceneFaces = new();
     private Dictionary<int, Vertex> renderVertices = new();
     private Dictionary<int, Edge> renderEdges = new();

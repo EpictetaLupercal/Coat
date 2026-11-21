@@ -57,6 +57,7 @@ public partial class Plan
             if (crosses) continue;
             var first = incident[0]; var last = incident[1];
             var merged = new Edge { Id = first.Id, A = a, B = b, Color = first.Color, Style = first.Style, ArrowStyle = first.ArrowStyle, ArrowSize = first.ArrowSize,
+                Dimension = first.Dimension, DimensionFontSize = first.DimensionFontSize, StartArrowStyle = first.HeadStyle(first.A == a), EndArrowStyle = last.HeadStyle(last.A == b),
                 ArrowStart = first.A == a ? first.ArrowStart : first.ArrowEnd, ArrowEnd = last.B == b ? last.ArrowEnd : last.ArrowStart };
             Edges.RemoveAll(e => incident.Contains(e)); Edges.Add(merged); Vertices.Remove(vertex);
             foreach (var group in Groups)

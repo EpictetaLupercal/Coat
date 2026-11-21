@@ -62,9 +62,10 @@ public partial class MainWindow : Window
         var version = new TextBlock { Text = "EPICTETA LUPERCAL  /  " + AppVersion.Number, FontSize = 10, Foreground = B("#728196"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right }; DockPanel.SetDock(version, Dock.Right); header.Children.Add(version); root.Children.Add(header);
         var toolbar = new DockPanel { Margin = new Thickness(12, 8, 12, 8), LastChildFill = false };
         var toolbarBorder = new Border { Background = B("#1B2430"), BorderBrush = B("#2B3645"), BorderThickness = new Thickness(0, 1, 0, 1), Child = toolbar }; Grid.SetRow(toolbarBorder, 1); root.Children.Add(toolbarBorder);
-        AddTool(toolbar, EditorTool.Select, "↖", L.T("Sélection"), "V"); AddTool(toolbar, EditorTool.Draw, "╱", L.T("Dessin"), "D"); AddTool(toolbar, EditorTool.Erase, "⌫", L.T("Gomme"), "E"); AddTool(toolbar, EditorTool.Paint, "◐", L.T("Couleur"), "C");
+        AddTool(toolbar, EditorTool.Select, "↖", L.T("Sélection"), "V"); AddTool(toolbar, EditorTool.Draw, "╱", L.T("Dessin"), "D"); AddTool(toolbar, EditorTool.Dimension, "↔", L.T("Cote"), ""); AddTool(toolbar, EditorTool.Erase, "⌫", L.T("Gomme"), "E"); AddTool(toolbar, EditorTool.Paint, "◐", L.T("Couleur"), "C");
         AddTool(toolbar, EditorTool.Shapes, "▱", L.T("Shapes"), "R");
         AddTool(toolbar, EditorTool.Annotation, "T", L.T("Texte"), "T");
+        AddTool(toolbar, EditorTool.Token, "●", L.T("Jetons"), "");
         toolbar.Children.Add(new Border { Background = B("#354151"), Width = 1, Margin = new Thickness(12, 5, 14, 5) });
         toolbar.Children.Add(new TextBlock { Text = L.T("GRILLE"), FontSize = 10, Foreground = B("#96A4B6"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
         gridChoice.Width = 108; gridChoice.Height = 32; gridChoice.VerticalAlignment = VerticalAlignment.Center;
@@ -125,8 +126,8 @@ public partial class MainWindow : Window
     { RegisterFeature(text, action); var b = new Button { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch }; b.Click += (_, _) => action(); return b; }
     private void AddTool(DockPanel bar, EditorTool tool, string icon, string title, string key)
     {
-        var content = new StackPanel { Orientation = Orientation.Horizontal }; content.Children.Add(new TextBlock { Text = icon, FontSize = 18, Margin = new Thickness(0, -2, 7, 0) }); content.Children.Add(new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center });
-        var button = Button("", () => SetTool(Canvas.Tool == tool ? EditorTool.None : tool)); button.Content = content; button.Margin = new Thickness(0, 0, 5, 0); button.Padding = new Thickness(11, 7, 11, 7); button.ToolTip = title + " · " + CurrentHint(ParseHint(key)!); toolButtons[tool] = button; bar.Children.Add(button);
+        var content = new StackPanel { Orientation = Orientation.Horizontal }; content.Children.Add(new TextBlock { Text = icon, FontSize = 18, Margin = new Thickness(0, -2, 5, 0) }); content.Children.Add(new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center });
+        var button = Button("", () => SetTool(Canvas.Tool == tool ? EditorTool.None : tool)); button.Content = content; button.Margin = new Thickness(0, 0, 5, 0); button.Padding = new Thickness(8, 7, 8, 7); button.ToolTip = key.Length == 0 ? title : title + " · " + CurrentHint(ParseHint(key)!); System.Windows.Automation.AutomationProperties.SetName(button, title); toolButtons[tool] = button; bar.Children.Add(button);
     }
     public void SetTool(EditorTool tool) { Canvas.SetTool(tool); UpdateToolButtons(); UpdateStatus(); Canvas.Focus(); }
     private void UpdateToolButtons()
@@ -171,19 +172,23 @@ public partial class MainWindow : Window
     }
     public void UpdateInspector()
     {
-        confirmations.Clear(); inspectorCommands.Clear(); UpdateLevels(); inspector.Children.Clear(); inspectorHints.Clear(); inspectorHelp = null;
+        CloseColorPicker(false); confirmations.Clear(); inspectorCommands.Clear(); UpdateLevels(); inspector.Children.Clear(); inspectorHints.Clear(); inspectorHelp = null;
         if (Canvas.Tool != EditorTool.None)
         {
-        string[] names = { L.T("Sélection"), L.T("Dessin de contours"), L.T("Gomme"), L.T("Coloriage"), "", L.T("Shapes"), L.T("Annotations") };
+        string[] names = { L.T("Sélection"), L.T("Dessin de contours"), L.T("Gomme"), L.T("Coloriage"), "", L.T("Shapes"), L.T("Annotations"), L.T("Cote"), L.T("Jetons") };
         InspectorTitle(names[(int)Canvas.Tool]);
         if (Canvas.Tool == EditorTool.Select)
         {
             ModeButtons(new[] { L.T("•  Points"), L.T("╱  Arêtes"), L.T("▱  Zones") }, (int)Canvas.Mode, i => { Canvas.CancelGesture(); Canvas.ClearSelection(); Canvas.Mode = (SelectionMode)i; UpdateInspector(); Canvas.InvalidateVisual(); Canvas.Focus(); });
             var across = new CheckBox { Content = L.T("Sélection sur plusieurs niveaux"), IsChecked = Canvas.SelectAcrossLevels }; across.Click += (_, _) => { Canvas.SelectAcrossLevels = across.IsChecked == true; Canvas.ClearSelection(); Canvas.InvalidateVisual(); }; inspector.Children.Add(across);
+            var dimensionEdges = Canvas.SelectionEdges();
+            var dimensions = Document.Edges.Where(e => dimensionEdges.Contains(e.Id) && e.Dimension).ToList();
+            if (dimensions.Count > 0) DimensionControls(dimensions, false);
             TransformInspector();
             if (Canvas.Transform == TransformKind.Translation)
                 ToolHint(Canvas.Mode == SelectionMode.Edge ? L.T("Glissez une arête ou l’intérieur d’une forme entièrement sélectionnée pour la déplacer. Maintenez Maj et glissez pour extruder une épaisseur.") : Canvas.Mode == SelectionMode.Vertex ? L.T("Glissez un point ou saisissez ses coordonnées. Une forme entièrement sélectionnée se déplace aussi depuis son intérieur.") : L.T("Cliquez à l’intérieur d’un contour fermé pour sélectionner toute sa zone."));
             ToolHint(L.T("Ctrl + clic : sélection multiple. Glissez dans le vide pour sélectionner par rectangle."));
+            ToolHint(L.T("Double-cliquez un point, une arête ou une zone pour modifier un élément du groupe. La sélection individuelle reste active jusqu’à la désélection ; les groupes sont conservés."));
             StyleInspector();
             if (Canvas.SelectedAnnotation != null) AnnotationInspector();
             var ids = Canvas.SelectionPoints();
@@ -199,10 +204,17 @@ public partial class MainWindow : Window
                 if (Canvas.SelectedFaces.Count > 0) Description(L.F($"Surface : {Document.Faces().Where(f => Canvas.SelectedFaces.Contains(f.Key)).Sum(f => f.Area):0.##} u²"));
 
             }
-            else Description(L.T("Aucune sélection"));
+            else if (Canvas.SelectedAnnotations.Count == 0) Description(L.T("Aucune sélection"));
+            if (Canvas.SelectedAnnotations.Count > 0 && Canvas.SelectedAnnotation == null) Description(L.F($"{Canvas.SelectedAnnotations.Count} textes et jetons sélectionnés"));
+            Divider(); Heading(L.T("GROUPES"));
+            var ignoreGroups = Button(L.T("Ignorer les groupes"), Canvas.ToggleIgnoreGroups);
+            ignoreGroups.ToolTip = L.T("Sélectionnez les points, arêtes et zones séparément sans dissocier les groupes. Recliquez pour réactiver la sélection des groupes.");
+            System.Windows.Automation.AutomationProperties.SetName(ignoreGroups,L.T("Ignorer les groupes"));
+            System.Windows.Automation.AutomationProperties.SetItemStatus(ignoreGroups,L.T(Canvas.GroupsIgnored ? "Activé" : "Désactivé"));
+            if(Canvas.GroupsIgnored){ignoreGroups.Background=B("#304E48");ignoreGroups.BorderBrush=B("#78DCC1");ignoreGroups.Foreground=B("#9BEBD4");}
+            ignoreGroups.Margin = new Thickness(0,0,0,10); inspector.Children.Add(ignoreGroups);
             if (ids.Count > 0)
             {
-                Divider(); Heading(L.T("GROUPES"));
                 var groups = Document.MatchingGroups(Canvas.SelectedVertices, Canvas.SelectionEdges());
                 if (groups.Count > 0) Description(string.Join(" · ", groups.Select(g => g.Name)));
                 else ToolHint(L.T("Sélectionnez plusieurs éléments puis regroupez-les pour les manipuler ensemble."));
@@ -213,7 +225,8 @@ public partial class MainWindow : Window
                 inspector.Children.Add(actions);
             }
         }
-        else if (Canvas.Tool == EditorTool.Annotation) AnnotationInspector();
+        else if (Canvas.Tool == EditorTool.Dimension) DimensionInspector();
+        else if (Canvas.Tool is EditorTool.Annotation or EditorTool.Token) AnnotationInspector();
         else if (Canvas.Tool == EditorTool.Draw)
         {
             DrawInspector();
@@ -244,10 +257,8 @@ public partial class MainWindow : Window
             PaintStyleInspector();
             var palette = new PaletteView(SavedColors, color => { Canvas.PaintColor = color; UpdateInspector(); }, () => Canvas.PaintColor, Notify) { Margin = new Thickness(0, 1, 0, 12) };
             inspector.Children.Add(palette);
-            var wheel = Button(L.T("◉  Roue de couleurs…"), () => ChooseColor(Canvas.PaintColor, color => { Canvas.PaintColor = color; UpdateInspector(); }));
+            var wheel = ColorButton(() => Canvas.PaintColor, color => { Canvas.PaintColor = color; palette.Refresh(); });
             wheel.Margin = new Thickness(0, 0, 0, 10); inspector.Children.Add(wheel);
-            var hex = Field(L.T("Couleur"), Canvas.PaintColor, numeric: false);
-            inspector.Children.Add(ConfirmButton(L.T("Utiliser cette couleur"), () => { try { var c = (Color)ColorConverter.ConvertFromString(hex.Text.Trim()); Canvas.PaintColor = $"#{c.R:X2}{c.G:X2}{c.B:X2}"; UpdateInspector(); } catch { Notify(L.T("Couleur invalide. Exemple : #66C5AD")); } }, hex));
             if (Canvas.SelectionPoints().Count > 0)
             {
                 var apply = Button(L.T("Colorer la sélection"), () => Mutate(() => { if (Canvas.PaintLines) foreach (var e in Document.Edges.Where(e => Canvas.SelectedEdges.Contains(e.Id))) { e.Color = Canvas.PaintColor; e.Style = Canvas.PaintLineStyle; } else foreach (var f in Canvas.SelectedFaces) { Canvas.PaintFace(f); } })); apply.Margin = new Thickness(0, 8, 0, 0); inspector.Children.Add(apply);
@@ -287,7 +298,7 @@ public partial class MainWindow : Window
         var delete = Button(L.T("Supprimer ce niveau"), DeleteActiveLevel); delete.FontSize = 11; delete.Padding = new Thickness(5); delete.Margin = new Thickness(0, 7, 0, 0); delete.Foreground = B("#E3A0A9"); levelsPanel.Children.Add(delete);
         LevelHeightControls();
         var organize = Button(L.T("Organisation"), ShowOrganization); organize.Margin = new Thickness(0, 6, 0, 0); organize.FontSize = 11; organize.Padding = new Thickness(5); levelsPanel.Children.Add(organize);
-        if (Canvas.SelectionPoints().Count > 0 || Canvas.SelectedAnnotation != null)
+        if (Canvas.SelectionPoints().Count > 0 || Canvas.SelectedAnnotations.Count > 0)
         {
             levelsPanel.Children.Add(new TextBlock { Text = L.T("AFFECTER LA SÉLECTION AU NIVEAU"), FontSize = 9, Foreground = B("#A9B9CC"), Margin = new Thickness(0, 14, 0, 7) });
             var assign = new DockPanel();
@@ -321,8 +332,7 @@ public partial class MainWindow : Window
     }
     public void MoveSelection(double x, double y)
     {
-        if (Canvas.SelectedAnnotation is int noteId) { Mutate(() => { var note = Document.Annotations.First(a => a.Id == noteId); note.X += x; note.Y += y; }); return; }
-        var ids = Canvas.SelectionPoints(); if (ids.Count == 0 || (x == 0 && y == 0)) return;
+        if ((Canvas.SelectionPoints().Count + Canvas.SelectedAnnotations.Count == 0) || (x == 0 && y == 0)) return;
         TransformSelection(p => p + new V2(x, y));
     }
     public void GroupSelection()
@@ -339,19 +349,21 @@ public partial class MainWindow : Window
     }
     public void AssignSelectionToLevel(int level)
     {
-        if (Canvas.SelectionPoints().All(id => Document.Get(id).Level == level) && Canvas.SelectedAnnotation == null) return;
-        if (Canvas.SelectedAnnotation is int noteId) { Canvas.CancelGesture(); Mutate(() => { Document.EnsureLevel(level); Document.Annotations.First(a => a.Id == noteId).Level = level; Document.ActiveLevel = level; }); return; }
-        if (Canvas.SelectionPoints().Count == 0) return;
+        var notes = Canvas.SelectedAnnotations.ToHashSet();
+        if(Canvas.SelectionPoints().Count+notes.Count==0)return;
+        if(Canvas.SelectionPoints().All(id=>Document.Get(id).Level==level)&&Document.Annotations.Where(a=>notes.Contains(a.Id)).All(a=>a.Level==level))return;
         Canvas.CancelGesture();
         Mutate(() =>
         {
             var result = Document.TransferToLevel(Canvas.SelectedVertices, Canvas.SelectedEdges, Canvas.SelectedFaces, level);
-            Document.ActiveLevel = level; Canvas.ClearSelection();
+            foreach(var note in Document.Annotations.Where(a=>notes.Contains(a.Id)))note.Level=level;
+            Document.ActiveLevel = level; Canvas.ClearSelection(); Canvas.SelectedAnnotations.UnionWith(notes);
             if (Canvas.Mode == SelectionMode.Vertex) Canvas.SelectedVertices.UnionWith(result.Points);
             else if (Canvas.Mode == SelectionMode.Face) Canvas.SelectedFaces.UnionWith(result.Faces);
             else Canvas.SelectedEdges.UnionWith(result.Edges);
         }); Canvas.Focus();
     }
+
     public void Escape()
     {
         Canvas.CancelGesture(); Canvas.ClearSelection();
@@ -363,9 +375,10 @@ public partial class MainWindow : Window
         if (NumericExpression.TryEvaluate(box.Text, out n) && Math.Abs(n) <= 1e8) { if (!double.TryParse(box.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out _)) box.Text = n.ToString("G15", CultureInfo.InvariantCulture); return true; }
         Notify(L.T("Saisissez une coordonnée numérique valide.")); box.Focus(); box.SelectAll(); return false;
     }
-    public void Mutate(Action action) { Canvas.Anchor = null; var before = Document.Serialize(); action(); Commit(before); }
+    public void Mutate(Action action) { CloseColorPicker(false); Canvas.Anchor = null; var before = Document.Serialize(); action(); Commit(before); }
     public void Commit(string before)
     {
+        CloseColorPicker(false);
         if (before != Document.Serialize()) History.Push(before);
         Canvas.RefreshGeometry(); UpdateInspector(); UpdateStatus();
     }
@@ -385,8 +398,8 @@ public partial class MainWindow : Window
     private void ReplaceFromHistory(Plan p) { Document = p; Canvas.ClearSelection(); Canvas.RefreshGeometry(); SetGrid(p.Grid); }
     public void Duplicate()
     {
-        if (Canvas.SelectedAnnotation is int noteId) { Mutate(() => { var a = Document.Annotations.First(n => n.Id == noteId); var copy = new Annotation { Id = Document.NextId++, Text = a.Text, X = a.X + Document.Grid, Y = a.Y - Document.Grid, Size = a.Size, Color = a.Color, Level = a.Level, IsToken = a.IsToken }; Document.Annotations.Add(copy); Canvas.SelectedAnnotation = copy.Id; }); return; }
-        var ids = Canvas.SelectionPoints(); if (ids.Count == 0) return;
+        var notes = Document.Annotations.Where(a=>Canvas.SelectedAnnotations.Contains(a.Id)).ToList();
+        var ids = Canvas.SelectionPoints(); if (ids.Count + notes.Count == 0) return;
         Mutate(() =>
         {
             var old = Document.Edges.Where(e => ids.Contains(e.A) && ids.Contains(e.B)).ToList();
@@ -398,12 +411,14 @@ public partial class MainWindow : Window
             foreach (var id in map.Values.Where(id => !Document.Edges.Any(e => e.A == id || e.B == id))) Document.Get(id).KeepPoint = true;
             Canvas.ClearSelection(); Canvas.SelectedEdges.UnionWith(edgeMap.Values); if (edgeMap.Count == 0) Canvas.SelectedVertices.UnionWith(map.Values);
             foreach (var face in oldFaces) { var key = string.Join("-", face.Vertices.Select(id => map[id]).Order()); Document.Fills[key] = face.Color; Document.FillPatterns[key] = face.Pattern; if (face.Gradient != null) Document.Gradients[key] = face.Gradient; }
+            foreach(var note in notes){var copy=CloneNote(note,Document.NextId++,new V2(Document.Grid,-Document.Grid),note.Level);Document.Annotations.Add(copy);Canvas.SelectedAnnotations.Add(copy.Id);}
             Document.Normalize();
         });
     }
     private void OnKey(object sender, KeyEventArgs e)
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (Canvas.IsColorSampling && key == Key.Escape) { Canvas.CancelColorSampling(); e.Handled=true; return; }
         if (e.OriginalSource is TextBox && key != Key.Escape) return;
         var modifiers = Keyboard.Modifiers;
         var binding = new Shortcut(key, modifiers);
@@ -489,7 +504,7 @@ public partial class MainWindow : Window
     }
     public void LoadDocument(Plan plan, string path)
     {
-        Canvas.CancelGesture(); Document = plan; file = path; saved = plan.Serialize(); History.Clear(); Canvas.ClearSelection(); Canvas.Center = new V2(plan.ViewX, plan.ViewY); Canvas.Zoom = plan.Zoom; RestoreView(); Canvas.RefreshGeometry(); SetGrid(plan.Grid); UpdateInspector(); UpdateStatus();
+        Canvas.CancelGesture(); Canvas.ResetGroupSelectionMode(); Document = plan; file = path; saved = plan.Serialize(); History.Clear(); Canvas.ClearSelection(); Canvas.Center = new V2(plan.ViewX, plan.ViewY); Canvas.Zoom = plan.Zoom; RestoreView(); Canvas.RefreshGeometry(); SetGrid(plan.Grid); UpdateInspector(); UpdateStatus();
     }
     private void LoadDemo() { Canvas.CancelGesture(); if (!CheckSave()) return; LoadDocument(Plan.Demo(), ""); saved = new Plan().Serialize(); Canvas.Fit(); UpdateTitle(); }
     public bool Save(bool saveAs = false)

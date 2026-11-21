@@ -23,12 +23,13 @@ public partial class MainWindow
         var a = Add("X", x, xName, 0); var b = Add("Y", y, yName, 1); inspector.Children.Add(row); return (a, b);
     }
     private record LineChoice(string Title, ImageSource Image);
+    private static DataTemplate StrokeChoiceTemplate() => (DataTemplate)System.Windows.Markup.XamlReader.Parse("<DataTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><StackPanel Orientation=\"Horizontal\"><Image Source=\"{Binding Image}\" Width=\"68\" Height=\"20\" Margin=\"0,0,8,0\"/><TextBlock Text=\"{Binding Title}\" VerticalAlignment=\"Center\"/></StackPanel></DataTemplate>");
     private void DrawInspector()
     {
         Heading(L.T("STYLE DES LIGNES"));
-        var ids = Canvas.SelectionEdges();
+        var ids = Document.Edges.Where(e => Canvas.SelectionEdges().Contains(e.Id) && !e.Dimension).Select(e => e.Id).ToHashSet();
         var choice = new ComboBox { Height = 34, Margin = new Thickness(0, 0, 0, 10) };
-        choice.ItemTemplate = (DataTemplate)System.Windows.Markup.XamlReader.Parse("<DataTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><StackPanel Orientation=\"Horizontal\"><Image Source=\"{Binding Image}\" Width=\"100\" Height=\"18\" Margin=\"0,0,10,0\"/><TextBlock Text=\"{Binding Title}\" VerticalAlignment=\"Center\"/></StackPanel></DataTemplate>");
+        choice.ItemTemplate = StrokeChoiceTemplate();
         string[] names = { L.T("Continu"), L.T("Long"), L.T("Court") };
         for (int i = 0; i < names.Length; i++)
         {
@@ -38,7 +39,7 @@ public partial class MainWindow
         }
         System.Windows.Automation.AutomationProperties.SetName(choice, L.T("STYLE DES LIGNES"));
         choice.SelectedIndex = (int)Canvas.DrawAppearance.Style;
-        choice.SelectionChanged += (_, _) => { var style = (LineStyle)choice.SelectedIndex; Canvas.DrawAppearance.Style = style; if (ids.Count > 0) Mutate(() => { foreach (var edge in Document.Edges.Where(e => ids.Contains(e.Id))) edge.Style = style; }); };
+        choice.SelectionChanged += (_, _) => { bool dimension = false; var style = (LineStyle)choice.SelectedIndex; void Apply() { Canvas.DrawAppearance.Dimension = dimension; Canvas.DrawAppearance.Style = style; foreach (var edge in Document.Edges.Where(e => ids.Contains(e.Id))) { edge.Style = style; edge.Dimension = dimension; } } if (ids.Count > 0) Mutate(Apply); else { Apply(); UpdateInspector(); } };
         inspector.Children.Add(choice); ArrowControls(ids);
         ToolHint(L.T("Ces réglages s’appliquent aux nouveaux traits et aux arêtes sélectionnées. Sélectionnez une arête puis ouvrez Draw pour modifier ses flèches."));
     }
@@ -46,6 +47,14 @@ public partial class MainWindow
 public partial class EditorCanvas
 {
     public Edge DrawAppearance { get; } = new();
+    public Edge DimensionAppearance { get; } = new() { Dimension = true };
+    internal Edge ActiveStroke => Tool == EditorTool.Dimension ? DimensionAppearance : DrawAppearance;
+    private void InitializeDimensionAppearance()
+    {
+        var ids = SelectionEdges(); var source = Plan.Edges.FirstOrDefault(e => e.Dimension && ids.Contains(e.Id));
+        if (source != null) { DimensionAppearance.Color = source.Color; DimensionAppearance.CopyArrows(source); }
+        DimensionAppearance.Dimension = true; DimensionAppearance.Style = LineStyle.Solid;
+    }
     private void InitializeDrawAppearance()
     {
         var ids = SelectionEdges(); var source = Plan.Edges.FirstOrDefault(e => ids.Contains(e.Id));
@@ -53,16 +62,11 @@ public partial class EditorCanvas
     }
     private void DrawStrokePreview(DrawingContext dc, V2 a, V2 b)
     {
-        var pen = new Pen(Accent, 1.8) { DashStyle = DrawAppearance.Style == LineStyle.Solid ? DashStyles.Solid : DrawAppearance.Style == LineStyle.LongDash ? new DashStyle(new double[] { 8, 4 }, 0) : new DashStyle(new double[] { 2, 3 }, 0) };
-        dc.DrawLine(pen, Screen(a), Screen(b));
-        foreach (bool start in new[] { true, false })
-        {
-            if (!(start ? DrawAppearance.ArrowStart : DrawAppearance.ArrowEnd)) continue;
-            var points = ArrowGeometry.Points(start ? a : b, start ? b : a, DrawAppearance.ArrowSize, DrawAppearance.ArrowStyle); if (points.Count == 0) continue;
-            var shape = new StreamGeometry(); using (var path = shape.Open()) { path.BeginFigure(Screen(points[0]), DrawAppearance.ArrowStyle != ArrowKind.Open, DrawAppearance.ArrowStyle != ArrowKind.Open); path.PolyLineTo(points.Skip(1).Select(Screen).ToArray(), true, false); }
-            dc.DrawGeometry(DrawAppearance.ArrowStyle == ArrowKind.Open ? null : Accent, new Pen(Accent, 1.8), shape);
-        }
+        var appearance = ActiveStroke;
+        dc.DrawLine(new Pen(Accent, 1.8) { DashStyle = EdgeDash(appearance.Style) }, Screen(a), Screen(b));
+        StrokeDecoration.Draw(dc, Screen(a), Screen(b), a, b, appearance, Zoom, VisualTreeHelper.GetDpi(this).PixelsPerDip);
     }
+
     private (int X, int Y)? scaleHandle;
     private V2 scaleReference;
     private double scaleFactorX = 1, scaleFactorY = 1;
@@ -78,7 +82,7 @@ public partial class EditorCanvas
             if ((x != 0 || y != 0) && (x == 0 || wide) && (y == 0 || tall)) result.Add((x, y, new Point(x < 0 ? l : x > 0 ? r : cx, y > 0 ? t : y < 0 ? b : cy)));
         return result;
     }
-    private bool ScaleReady => Tool == EditorTool.Select && Transform == TransformKind.Scale && SelectedAnnotation == null;
+    private bool ScaleReady => Tool == EditorTool.Select && Transform == TransformKind.Scale && SelectedAnnotations.Count == 0;
     private (int X, int Y, Point Position)? HitScaleHandle() => ScaleReady ? ScaleHandles().Where(h => Math.Abs(h.Position.X - mouseScreen.X) <= 10 && Math.Abs(h.Position.Y - mouseScreen.Y) <= 10).Select(h => ((int X, int Y, Point Position)?)h).FirstOrDefault() : null;
     private void UpdateScaleCursor()
     {
@@ -126,9 +130,9 @@ public partial class EditorCanvas
         var menu = new ContextMenu { Background = Brushes.White, Foreground = Brushes.Black };
         void Item(string name, Action action, bool enabled)
         { var item = new MenuItem { Header = L.T(name), Background = Brushes.White, Foreground = Brushes.Black, IsEnabled = enabled }; if (Host.Shortcuts.Bindings.TryGetValue(name, out var key) && key.Key != Key.None) item.InputGestureText = key.ToString(); item.Click += (_, _) => action(); menu.Items.Add(item); }
-        bool selected = SelectionPoints().Count > 0 || SelectedAnnotation != null;
-        Item("Dissoudre les sommets", () => DissolveSelection(true), Tool == EditorTool.Select && SelectedVertices.Count > 0 && SelectedAnnotation == null);
-        Item("Dissoudre les arêtes", () => DissolveSelection(false), Tool == EditorTool.Select && SelectionEdges().Count > 0 && SelectedAnnotation == null);
+        bool selected = SelectionPoints().Count > 0 || SelectedAnnotations.Count > 0;
+        Item("Dissoudre les sommets", () => DissolveSelection(true), Tool == EditorTool.Select && SelectedVertices.Count > 0 && SelectedAnnotations.Count == 0);
+        Item("Dissoudre les arêtes", () => DissolveSelection(false), Tool == EditorTool.Select && SelectionEdges().Count > 0 && SelectedAnnotations.Count == 0);
         menu.Items.Add(new Separator()); Item("Supprimer", DeleteSelection, selected); Item("Dupliquer", Host.Duplicate, selected);
         return menu;
     }

@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 namespace Coat;
-public enum ArrowKind { Triangle, Open, Diamond }
+public enum ArrowKind { Triangle, Open, Diamond, Round }
 public record GradientFill(string EndColor, double Angle);
 public partial class Plan
 {
@@ -18,19 +18,8 @@ public static class ArrowGeometry
         var n = new V2(-d.Y, d.X) * .45;
         return kind == ArrowKind.Diamond ? new() { tip, tip + d * .5 + n, tip + d, tip + d * .5 - n } : new() { tip + d + n, tip, tip + d - n };
     }
-    public static string Svg(Plan plan, Edge edge)
-    {
-        string result = "";
-        foreach (bool start in new[] { true, false })
-        {
-            if (!(start ? edge.ArrowStart : edge.ArrowEnd)) continue;
-            var points = Points(plan.Get(start ? edge.A : edge.B).P, plan.Get(start ? edge.B : edge.A).P, edge.ArrowSize, edge.ArrowStyle);
-            string coords = string.Join(" ", points.Select(p => p.X.ToString("G17", CultureInfo.InvariantCulture) + "," + (-p.Y).ToString("G17", CultureInfo.InvariantCulture)));
-            string color = System.Security.SecurityElement.Escape(edge.Color) ?? "#CCD5DF";
-            result += $"<{(edge.ArrowStyle == ArrowKind.Open ? "polyline" : "polygon")} points=\"{coords}\" fill=\"{(edge.ArrowStyle == ArrowKind.Open ? "none" : color)}\" stroke=\"{color}\" stroke-width=\"2\"/>";
-        }
-        return result;
-    }
+    public static string Svg(Plan plan, Edge edge) => StrokeDecoration.Svg(plan.Get(edge.A).P, plan.Get(edge.B).P, edge);
+
 }
 public partial class EditorCanvas
 {
@@ -61,21 +50,15 @@ public partial class EditorCanvas
     }
     private void DrawArrows(DrawingContext dc, IEnumerable<Edge> edges)
     {
-        foreach (var edge in edges.Where(e => e.ArrowStart || e.ArrowEnd)) foreach (bool start in new[] { true, false })
-        {
-            if (!(start ? edge.ArrowStart : edge.ArrowEnd)) continue;
-            var points = ArrowGeometry.Points(VertexAt(start ? edge.A : edge.B).P, VertexAt(start ? edge.B : edge.A).P, edge.ArrowSize, edge.ArrowStyle);
-            if (points.Count == 0) continue;
-            var path = new StreamGeometry(); using (var c = path.Open()) { c.BeginFigure(Screen(points[0]), edge.ArrowStyle != ArrowKind.Open, edge.ArrowStyle != ArrowKind.Open); c.PolyLineTo(points.Skip(1).Select(Screen).ToArray(), true, false); }
-            dc.DrawGeometry(edge.ArrowStyle == ArrowKind.Open ? null : Brush(edge.Color), new Pen(Brush(edge.Color), 2), path);
-        }
+        foreach (var edge in edges.Where(e => e.ArrowStart || e.ArrowEnd || e.Dimension))
+            StrokeDecoration.Draw(dc, Screen(VertexAt(edge.A).P), Screen(VertexAt(edge.B).P), VertexAt(edge.A).P, VertexAt(edge.B).P, edge, Zoom, VisualTreeHelper.GetDpi(this).PixelsPerDip);
     }
+
 }
 public partial class MainWindow
 {
     private void AnnotationOptions()
     {
-        ModeButtons(new[] { L.T("Texte"), L.T("Jeton") }, (Document.Annotations.FirstOrDefault(a => a.Id == Canvas.SelectedAnnotation)?.IsToken ?? Canvas.PlaceTokens) ? 1 : 0, i => { Canvas.PlaceTokens = i == 1; Canvas.ClearSelection(); UpdateInspector(); });
         var snap = new CheckBox { Content = L.T("Accrochage : sommets, milieux et grille"), IsChecked = Canvas.SnapAnnotations };
         snap.Click += (_, _) => Canvas.SnapAnnotations = snap.IsChecked == true; inspector.Children.Add(snap);
         RegisterFeature(L.T("Accrochage : sommets, milieux et grille"), () => { Canvas.SnapAnnotations = !Canvas.SnapAnnotations; UpdateInspector(); });
@@ -85,7 +68,7 @@ public partial class MainWindow
         if (Canvas.PaintLines) return;
         ModeButtons(new[] { L.T("Remplissage"), L.T("Dégradé") }, Canvas.GradientMode ? 1 : 0, i => { Canvas.GradientMode = i == 1; UpdateInspector(); });
         if (!Canvas.GradientMode) return;
-        inspector.Children.Add(Button(L.T("Couleur de fin…"), () => ChooseColor(Canvas.GradientEnd, value => { Canvas.GradientEnd = value; UpdateInspector(); })));
+        inspector.Children.Add(ColorButton(() => Canvas.GradientEnd, value => { Canvas.GradientEnd = value; foreach (string key in Canvas.SelectedFaces) if (Document.Gradients.TryGetValue(key,out var gradient)) Document.Gradients[key] = gradient with { EndColor = value }; }, "Couleur de fin…"));
         var angle = Field("Angle (°)", F(Canvas.GradientAngle));
         inspector.Children.Add(ConfirmButton(L.T("Appliquer le dégradé"), () => { if (!Number(angle, out double value)) return; Canvas.GradientAngle = value % 360; if (Canvas.SelectedFaces.Count > 0) Mutate(() => { foreach (string key in Canvas.SelectedFaces) Canvas.PaintFace(key); }); }, angle));
     }
@@ -95,22 +78,31 @@ public partial class MainWindow
         var display = edges.Count > 0 ? edges : new List<Edge> { Canvas.DrawAppearance };
         var targets = edges.Append(Canvas.DrawAppearance).ToList();
         void Change(Action action) { if (edges.Count > 0) Mutate(action); else { action(); UpdateInspector(); Canvas.InvalidateVisual(); } }
-        var flags = new WrapPanel(); inspector.Children.Add(flags);
-        void Flag(string label, Func<Edge, bool> get, Action<Edge, bool> set)
+        foreach (bool start in new[] { true, false })
         {
-            var box = new CheckBox { Content = label, IsThreeState = false, IsChecked = display.All(get) ? true : display.All(e => !get(e)) ? false : null, Margin = new Thickness(0, 4, 10, 8) };
-            box.Click += (_, _) => Change(() => { foreach (var edge in targets) set(edge, box.IsChecked == true); }); flags.Children.Add(box);
-            RegisterFeature(label, () => { bool value = !display.All(get); Change(() => { foreach (var edge in targets) set(edge, value); }); });
+            string label = L.T(start ? "Flèche au début" : "Flèche à la fin");
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 8) }; row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(52) }); row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.Children.Add(new TextBlock { Text = L.T(start ? "Début" : "Fin"), VerticalAlignment = VerticalAlignment.Center, Foreground = B("#A7B6C9") });
+            var combo = new ComboBox { Height = 34, ItemTemplate = StrokeChoiceTemplate(), IsEnabled = !display.All(e => e.Dimension) };
+            var kinds = new ArrowKind?[] { null, ArrowKind.Triangle, ArrowKind.Diamond, ArrowKind.Round, ArrowKind.Open };
+            string[] names = { L.T("Aucune"), L.T("Triangle"), L.T("Diamant"), L.T("Ronde"), L.T("Ouverte") };
+            for (int i = 0; i < kinds.Length; i++) combo.Items.Add(new LineChoice(names[i], StrokeDecoration.Icon(kinds[i], start)));
+            ArrowKind? Value(Edge e) => e.Dimension ? ArrowKind.Triangle : (start ? e.ArrowStart : e.ArrowEnd) ? e.HeadStyle(start) : null;
+            combo.SelectedIndex = display.All(e => Value(e) == Value(display[0])) ? Array.IndexOf(kinds, Value(display[0])) : -1;
+            System.Windows.Automation.AutomationProperties.SetName(combo, label); combo.ToolTip = label;
+            combo.SelectionChanged += (_, _) => { if (combo.SelectedIndex < 0) return; var kind = kinds[combo.SelectedIndex]; Change(() => { foreach (var edge in targets) { if (start) { edge.ArrowStart = kind.HasValue; edge.StartArrowStyle = kind; } else { edge.ArrowEnd = kind.HasValue; edge.EndArrowStyle = kind; } } }); };
+            Grid.SetColumn(combo, 1); row.Children.Add(combo); inspector.Children.Add(row);
+            RegisterFeature(label, () => Change(() => { bool value = !display.All(e => start ? e.ArrowStart : e.ArrowEnd); foreach (var edge in targets) { if (start) edge.ArrowStart = value; else edge.ArrowEnd = value; } }));
         }
-        Flag(L.T("Flèche au début"), e => e.ArrowStart, (e, b) => e.ArrowStart = b);
-        Flag(L.T("Flèche à la fin"), e => e.ArrowEnd, (e, b) => e.ArrowEnd = b);
-        inspector.Children.Add(Button(L.T("Double flèche"), () => Change(() => { foreach (var e in targets) e.ArrowStart = e.ArrowEnd = true; })));
-        ModeButtons(new[] { L.T("Triangle"), L.T("Ouverte"), L.T("Diamant") }, display.All(e => e.ArrowStyle == display[0].ArrowStyle) ? (int)display[0].ArrowStyle : -1, i => Change(() => { foreach (var e in targets) e.ArrowStyle = (ArrowKind)i; }));
-        foreach (var (label, style) in new[] { ("Triangle", ArrowKind.Triangle), ("Ouverte", ArrowKind.Open), ("Diamant", ArrowKind.Diamond) })
-            RegisterFeature(L.T(label), () => Change(() => { foreach (var edge in targets) edge.ArrowStyle = style; }));
+        RegisterFeature(L.T("Double flèche"), () => Change(() => { foreach (var edge in targets) edge.ArrowStart = edge.ArrowEnd = true; }));
+        foreach (var (label, style) in new[] { ("Triangle", ArrowKind.Triangle), ("Ouverte", ArrowKind.Open), ("Diamant", ArrowKind.Diamond), ("Ronde", ArrowKind.Round) })
+            RegisterFeature(L.T(label), () => Change(() => { foreach (var edge in targets) { edge.ArrowStyle = style; edge.StartArrowStyle = edge.EndArrowStyle = null; } }));
         var size = Field(L.T("Taille des flèches"), F(display[0].ArrowSize)); size.Tag = new NumericRange(1, 1024, false);
-        inspector.Children.Add(ConfirmButton(L.T("Appliquer les flèches"), () => { if (Number(size, out var n) && n >= 1 && n <= 1024) Change(() => { foreach (var e in targets) e.ArrowSize = n; }); }, size));
+        void Apply() { if (Number(size, out var n) && n >= 1 && n <= 1024 && targets.Any(e => e.ArrowSize != n)) Change(() => { foreach (var e in targets) e.ArrowSize = n; }); }
+        confirmations[size] = Apply; size.LostKeyboardFocus += (_, _) => { if (NumericExpression.TryEvaluate(size.Text, out var n) && n >= 1 && n <= 1024) Apply(); };
+        RegisterFeature(L.T("Appliquer les flèches"), Apply);
     }
+
     private Image PatternIcon(int pattern)
     {
         var g = new DrawingGroup(); using (var c = g.Open())

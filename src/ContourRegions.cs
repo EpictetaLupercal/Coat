@@ -42,6 +42,8 @@ internal sealed class ContourRegions
 }
 internal static class AppVersion
 {
-    internal static string Number => typeof(AppVersion).Assembly.GetName().Version!.ToString(3);
+    internal static string Number { get; } = typeof(AppVersion).Assembly
+        .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+        .Cast<System.Reflection.AssemblyInformationalVersionAttribute>().Single().InformationalVersion.Split('+')[0];
     internal static string Title => "Coat — v" + Number;
 }

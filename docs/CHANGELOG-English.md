@@ -1,4 +1,67 @@
-﻿# Coat 1.1.0 — Epicteta Lupercal
+# Coat 1.2 — Epicteta Lupercal
+
+## 1.2 — Color-aware .map geometry
+
+- Nested and adjacent fills merge only when their normalized RGB colors, level and extrusion settings match. Different floor colors remain distinct, just like walls and floors.
+- Inner shapes keep their original contours and classification. An orange floor with white pillars exports each pillar independently, using the configured wall color and level heights.
+- The outer surface is partitioned around inner shapes to prevent overlapping solids. Empty shapes remain holes; compatible same-color pieces still merge into convex brushes.
+- Source colors are retained in brush comments. The existing Valve 220 format and `__TB_empty` texture remain unchanged; these comments do not apply colored materials in the map editor.
+- Existing `.coat` files remain compatible. The title uses the configured release name, **Coat — v1.2**.
+
+## 1.1.7 — Ignore Groups selection toggle
+
+- Select → Groups now always exposes **Ignore Groups**, including when nothing is selected. The active button is highlighted.
+- Enable it to select vertices, edges and faces normally without group expansion. The current selection is cleared when enabling the mode so that the next click can pick one element directly.
+- This mode persists through deselection, Escape, selection-mode changes and geometry edits. Click the button again to restore group picking; any currently selected group members immediately expand to their complete groups.
+- Double-click individual selection remains available. Its active state is reflected by the button, which can also be used to return to group selection.
+- Group definitions and membership remain intact. The toggle does not modify project data or add an Undo step. Opening a project starts in normal group-selection mode.
+- **Ignore Groups** is configurable under selection shortcuts; no shortcut is assigned automatically.
+
+## 1.1.6 — Text confirmation and mixed marquee selection
+
+- **Enter** confirms annotation text. **Shift+Enter** inserts a line break at the caret, including replacement of selected text. Existing multiline content is preserved.
+- In Select, dragging a rectangle from empty canvas also selects text annotations and tokens, in Vertices, Edges and Faces modes. An annotation's full visible bounds must fit inside the rectangle, matching the existing full-containment rule for geometry.
+- Selected texts and tokens show individual outlines and can be moved with geometry, duplicated, copied, pasted, cut, deleted or assigned to a level together. Undo restores the entire operation in one step. Ctrl-click and Ctrl-drag support additive selection; Escape clears it.
+- Cross-level selection includes annotations on visible lower levels when enabled. Hidden annotations and upper-level notes (which are not rendered by the geometry-guide display) are excluded. Clipboard operations preserve relative level offsets.
+- Single-annotation editing and the deselected state of newly placed tokens remain available. Geometry caches are retained when moving only annotations.
+
+## 1.1.5 — Live color popup and faster token placement
+
+- A newly placed token remains deselected. Picking another icon changes the next token, so different symbols can be placed consecutively. Existing tokens can still be selected deliberately for editing.
+- Color buttons now show a color-wheel icon and current-color swatch. They open a compact anchored popup containing the wheel, editable HSV values, Hex, RGB feedback, saved colors, Add and an icon-only eyedropper. No Apply/Accept/Cancel action is required.
+- Valid changes apply immediately to the active drawing color, selected annotation/token color, selected gradient end colors, or wall-classification color. Incomplete Hex/HSV input keeps the last valid color. Click outside or press Escape to close the popup while retaining the current color.
+- A document color-editing session is grouped into one Undo step when the popup closes. Setting a drawing color alone does not create a document-history entry. Color-only rendering invalidation reuses the geometry cache.
+- The eyedropper samples directly on Coat's canvas, including reference images. Click to sample; Escape or right-click cancels sampling. It returns to the same popup without opening another window or requiring confirmation.
+- Saved palette slots keep their existing Add and right-click Delete behavior. All new controls follow the selected interface language. Existing projects and exported token shapes remain compatible.
+
+## 1.1.4 — Dedicated Tokens tool and symbol palette
+
+- **Tokens** is a dedicated toolbar button next to **Text**. The old Text/Token switch has been removed from the sidebar. Text and token placement are independent.
+- The compact palette contains 22 icon-only choices: Circle, Square, Triangle, Cross, Check, Skull, Star, Heart, Armor, Explosion, Ammo, Rocket, and digits 0–9. Names appear in translated tooltips and accessibility labels, not as large letter placeholders.
+- Choose a symbol, size and color, then click the canvas to place it. Select an existing token to change its shape, color, size or coordinates. Palette selection also sets the shape for the next token.
+- All symbols use vector geometry, including outlined digit glyphs for reliable SVG export. Shapes remain visible in PNG/SVG, follow level visibility, support snapping, dragging, undo/redo, duplication and clipboard operations.
+- Token shape is saved in the existing project format. Older tokens remain circles. The existing optional Token shortcut opens the dedicated tool; no shortcut is assigned by default.
+
+## 1.1.3 — Dedicated Dimension tool
+
+- **Dimension** is now a toolbar tool between Draw and Erase. It is removed from Draw's line-style list. Place two points to finish each dimension; Draw continues to create ordinary line chains.
+- Select a dimension in Select mode to edit **Font Size** and **Arrow Size** in the right panel. Confirm with Enter or **Apply Dimension**. Font-size expressions are supported, from 4 to 256. Undo, redo, duplication and clipboard operations retain the setting.
+- The Dimension tool also exposes these settings for new dimensions. Existing dimensions keep their own values. Text size is saved in `.coat` and used by canvas/PNG and SVG rendering. Legacy dimensions default to size 12.
+- The existing optional Dimension shortcut activates the dedicated tool; no default key is assigned.
+
+## 1.1.2 — Dimension lines and independent arrowheads
+
+- In Draw, **Start** and **End** are independent visual dropdowns: None, Triangle, Diamond, Round, and the retained Open style. Set different shapes at either end. Changes also apply to previously selected edges.
+- **Arrow Size** accepts expressions. Press Enter or leave the field to apply; the old checkbox, Double Arrow, style-button row and Apply Arrows button have been removed from the panel. Existing configurable commands remain available; new Dimension and Round commands are unassigned by default.
+- Choose **Dimension** from the line-style dropdown, then place two points to draw a measured line with two triangular arrowheads, perpendicular endpoint bars, and a centered distance in plan units. Distances update automatically when endpoints move or scale and are included in PNG and SVG, independently of View → Show Lengths. Dimension uses fixed triangular heads; switch back to Solid/Long/Short to edit independent endpoint shapes.
+- Dimensions use ordinary editable edges. Drawing across existing geometry follows the normal intersection/splitting rules; each resulting segment displays its own distance. This is a drawing style, not an automatic .map measurement entity.
+- Saved projects retain independent caps and dimension styling. Legacy common arrow styles still load. Copying, duplication, level transfers and normalization retain the added settings.
+
+## 1.1.1 — Individual selection within groups
+
+- In Select, double-click a vertex, edge or face to select it individually within its group. Group definitions and membership remain intact.
+- Subsequent clicks and Ctrl-clicks select individual elements until the selection is cleared. Dragging and numeric transforms keep the precise selection after geometry normalization.
+- Press Escape or click empty canvas to clear the selection and restore normal group picking. Changing selection mode, Select All and opening another project also return to normal group selection.
 
 ## 1.1.0 — Contours and .map export
 

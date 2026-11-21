@@ -29,9 +29,9 @@ internal static class Update107Tests
         c.SnapAnnotations = false; check(c.SnapAnnotation(new(15,18)) == new V2(15,18), "Disabling annotation snapping preserves exact coordinates"); c.SnapAnnotations = true;
         c.Mode = SelectionMode.Face; c.SelectAll(); w.Duplicate();
         check(w.Document.Gradients.Count >= 2 && w.Document.Edges.Any(e => e.ArrowEnd), "Duplicating geometry retains gradients and arrow appearance"); w.Undo();
-        w.SetTool(EditorTool.Annotation); c.PlaceTokens = true; c.PointerDown(c.Screen(new(320,96)),MouseButton.Left); c.PointerUp(MouseButton.Left);
+        w.SetTool(EditorTool.Token); c.PointerDown(c.Screen(new(320,96)),MouseButton.Left); c.PointerUp(MouseButton.Left);
         check(w.Document.Annotations.Count(a => a.IsToken) == 2, "Token mode places a selectable colored marker");
-        w.Duplicate(); check(w.Document.Annotations.Last().IsToken, "Token duplication retains its type");
+        c.SelectedAnnotation=w.Document.Annotations.Last().Id; w.Duplicate(); check(w.Document.Annotations.Last().IsToken, "Token duplication retains its type");
         w.LoadDocument(Plan.Parse(original), ""); w.SetTool(EditorTool.Paint); c.GradientMode = true; c.GradientEnd = "#00FF88"; c.GradientAngle = 90; c.PaintColor = "#2255FF"; c.PaintLines = false;
         c.PointerDown(c.Screen(new(160,130)), MouseButton.Left); c.PointerUp(MouseButton.Left);
         check(w.Document.Gradients[key].EndColor == "#00FF88", "Gradient painting applies the configured colors to the clicked face");

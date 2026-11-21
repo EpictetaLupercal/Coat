@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,20 +26,15 @@ internal static class Update05Tests
         picker.HexInput.Text = "#3282CF"; check(picker.SelectedHex == "#3282CF", "Editing hex updates the wheel color");
         picker.HexInput.Text = "#wrong"; check(picker.SelectedHex == "#3282CF", "Invalid hex leaves the last valid color intact");
         picker.SetColor(parsed); picker.UpdateLayout(); Pump(); MainWindow.SaveVisual(picker, Path.Combine(output, "coat-05-palette.png")); picker.Close();
-        picker = new ColorPicker(window, "#66C5AD");
-        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => { picker.HexInput.Text = "#AA4499"; Desc<Button>(picker).Single(b => b.Content as string == "Utiliser cette couleur").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }));
-        check(picker.ShowDialog() == true && picker.SelectedHex == "#AA4499", "Palette confirmation returns the chosen color through the dialog");
-        picker = new ColorPicker(window, "#66C5AD");
-        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => { picker.HexInput.Text = "#AA4499"; Desc<Button>(picker).Single(b => b.Content as string == "Annuler").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }));
-        check(picker.ShowDialog() != true, "Cancelling the palette returns no applied change");
+        string liveHex = "#66C5AD";
+        picker = new ColorPicker(window,liveHex); window.ShowColorPopup(picker,window.Canvas,value=>liveHex=value);
+        picker.HexInput.Text="#AA4499";
+        check(liveHex=="#AA4499", "Color popup applies hex changes immediately without confirmation");picker.Close();
+        check(liveHex=="#AA4499", "Closing the color popup keeps the last valid live color");
         var plan = Plan.Demo(); window.LoadDocument(plan, ""); window.Width = 1200; window.Height = 820; window.SetTool(EditorTool.Paint); window.UpdateLayout(); Pump();
-        var button = Desc<Button>(window).Single(b => b.Content as string == "◉  Roue de couleurs…");
-        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
-        {
-            var dialog = Application.Current.Windows.OfType<ColorPicker>().Single(); dialog.HexInput.Text = "#2288AA";
-            Desc<Button>(dialog).Single(b => b.Content as string == "Utiliser cette couleur").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        }));
-        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); check(window.Canvas.PaintColor == "#2288AA", "Paint inspector button applies the wheel color to the active palette");
+        var button = Desc<Button>(window).Single(b => System.Windows.Automation.AutomationProperties.GetName(b) == "◉  Roue de couleurs…");
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); window.ActiveColorPicker!.HexInput.Text="#2288AA";
+        check(window.Canvas.PaintColor=="#2288AA", "Paint color updates while its popup is open");window.CloseColorPicker();
         window.Canvas.PaintLines = false; window.Canvas.PointerDown(window.Canvas.Screen(new(-256, 0)), MouseButton.Left); window.Canvas.PointerUp(MouseButton.Left);
         check(plan.Fills[plan.HitFace(new(-256, 0))!.Key] == "#2288AA", "Color chosen in wheel is used by the fill gesture");
         window.SetTool(EditorTool.Select); var canvas = window.Canvas; canvas.Mode = SelectionMode.Edge; canvas.SelectedEdges.Add(plan.Edges[0].Id);

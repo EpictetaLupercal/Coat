@@ -1,4 +1,4 @@
-// Coat — Epicteta Lupercal
+﻿// Coat — Epicteta Lupercal
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -43,50 +43,21 @@ internal static class ColorSampling
 
 }
 
-internal sealed class CanvasColorPicker : Window
+public partial class EditorCanvas
 {
-    private readonly ScreenFrame frame;
-    private readonly TextBlock hint = new() { Foreground = Brushes.White, FontSize = 13, Text = L.T("Cliquez sur le plan pour prélever\nÉchap ou clic droit : annuler") };
-    private readonly Border sample = new() { Width = 24, Height = 24, Margin = new Thickness(0, 0, 9, 0), BorderBrush = Brushes.White, BorderThickness = new Thickness(1) };
-    private readonly Border label;
-    public Color? PickedColor { get; private set; }
-    public CanvasColorPicker(Window owner, ScreenFrame frame)
+    private ScreenFrame? colorFrame;
+    private Action<Color?>? colorSampleCompleted;
+    internal bool IsColorSampling => colorSampleCompleted != null;
+    internal void BeginColorSampling(ScreenFrame frame,Action<Color?> completed)
+    { colorFrame=frame;colorSampleCompleted=completed;Focus();CaptureMouse();Cursor=Cursors.Cross;Host.Notify(L.T("Cliquez sur le plan pour prélever\nÉchap ou clic droit : annuler")); }
+    internal void SampleColorAt(Point physicalPoint)
     {
-        this.frame = frame; Owner = owner; Title = L.T("Pipette — Coat"); WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
-        ShowInTaskbar = false; Cursor = Cursors.Cross; WindowStartupLocation = WindowStartupLocation.Manual;
-        Left = frame.Left / frame.ScaleX; Top = frame.Top / frame.ScaleY;
-        Width = frame.Bitmap.PixelWidth / frame.ScaleX; Height = frame.Bitmap.PixelHeight / frame.ScaleY;
-        var root = new Grid(); Content = root;
-        var image = new Image { Source = frame.Bitmap, Stretch = Stretch.Fill }; RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor); root.Children.Add(image);
-        var overlay = new Canvas { IsHitTestVisible = false }; root.Children.Add(overlay);
-        var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center }; row.Children.Add(sample); row.Children.Add(hint);
-        label = new Border { Child = row, Background = EditorCanvas.Brush("#17212B"), BorderBrush = Brushes.White, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Padding = new Thickness(10), MaxWidth = 420 };
-        overlay.Children.Add(label);
-        Canvas.SetLeft(label, 12); Canvas.SetTop(label, 12);
-        Loaded += (_, _) =>
-        {
-            var origin = PointToScreen(new Point()); var dpi = VisualTreeHelper.GetDpi(this);
-            Left += (frame.Left - origin.X) / dpi.DpiScaleX; Top += (frame.Top - origin.Y) / dpi.DpiScaleY;
-            Width = frame.Bitmap.PixelWidth / dpi.DpiScaleX; Height = frame.Bitmap.PixelHeight / dpi.DpiScaleY;
-            Focus(); UpdateSample();
-        };
-        MouseMove += (_, _) => UpdateSample();
-        MouseLeftButtonDown += (_, e) => { PickAt(ScreenPoint(Mouse.GetPosition(this))); e.Handled = true; };
-        MouseRightButtonDown += (_, e) => { Close(); e.Handled = true; };
-        PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { Close(); e.Handled = true; } };
+        if(colorFrame==null)return;
+        FinishColorSampling(colorFrame.TryColor(physicalPoint,out var color)?color:null);
     }
-    internal void PickAt(Point screenPoint)
+    internal void CancelColorSampling() => FinishColorSampling(null);
+    private void FinishColorSampling(Color? color)
     {
-        if (frame.TryColor(screenPoint, out var color)) { PickedColor = color; DialogResult = true; }
-    }
-    private Point ScreenPoint(Point point) => new(frame.Left + point.X * frame.Bitmap.PixelWidth / Math.Max(1, ActualWidth), frame.Top + point.Y * frame.Bitmap.PixelHeight / Math.Max(1, ActualHeight));
-    private void UpdateSample()
-    {
-        var local = Mouse.GetPosition(this); var screenPoint = ScreenPoint(local);
-        if (!frame.TryColor(screenPoint, out var color)) return;
-        sample.Background = new SolidColorBrush(color); hint.Text = ColorMath.Hex(color) + L.T("\nClic sur le plan : prélever · Échap / clic droit : annuler");
-        var point = local;
-        Canvas.SetLeft(label, Math.Clamp(point.X + 20, 0, Math.Max(0, ActualWidth - Math.Max(label.ActualWidth, 320))));
-        Canvas.SetTop(label, Math.Clamp(point.Y + 24, 0, Math.Max(0, ActualHeight - Math.Max(label.ActualHeight, 65))));
+        var completed=colorSampleCompleted;colorSampleCompleted=null;colorFrame=null;ReleaseMouseCapture();Cursor=ToolCursor;completed?.Invoke(color);
     }
 }

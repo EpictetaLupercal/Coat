@@ -50,7 +50,7 @@ public static partial class MapExporter
     private static List<MapBrush> MergeConvex(List<MapBrush> source)
     {
         var result = new List<MapBrush>();
-        foreach (var group in source.GroupBy(b => (b.Level, b.Bottom, b.Top, b.Surface)))
+        foreach (var group in source.GroupBy(b => (b.Level, b.Bottom, b.Top, b.Surface, b.Color)))
         {
             var pieces = group.ToList(); bool changed = true;
             while (changed)
