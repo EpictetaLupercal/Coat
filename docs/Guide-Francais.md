@@ -1,4 +1,13 @@
-# Coat 1.2
+# Coat 1.3.4
+
+## Plugins Lua
+
+Dans **Plugins → Ouvrir le dossier des plugins…**, ajoutez un fichier `.lua` ou un sous-dossier contenant `main.lua`. Rouvrez le menu pour lire le code ou lancer l’extension. Le plugin **Plan summary** fourni affiche un résumé des niveaux. [Guide de l’API Lua](LUA-PLUGINS.md)
+
+## 1.3 — Apparence
+
+Dans Édition → Préférences → Apparence, choisissez le thème classique ou Bordeaux. Survolez une commande puis maintenez Maj pour afficher sa description.
+
 
 ## 1.2 — Export .map selon la couleur
 

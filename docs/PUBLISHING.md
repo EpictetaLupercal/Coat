@@ -9,7 +9,7 @@ Include:
 - `README.md`, `.gitignore`, and `NuGet.Config`
 - `build.ps1` and `test.ps1`
 - `src/`, including `src/Locales/en.json`
-- `docs/` and `tools/`
+- `docs/`, `tools/` and `plugins/`
 
 Preserve the `.gitignore` file. Build output, release ZIPs, caches, old builds, and test artifacts are excluded. The English translation catalog is embedded at build time and does not need to be shipped separately.
 
@@ -32,9 +32,7 @@ The current build requires .NET Desktop Runtime 8 (x64) on the user's PC. This r
 
 ## Windows release
 
-The README currently links directly to `Coat-1.0.5-Windows-x64.zip` on the `main` branch of `EpictetaLupercal/Coat`. Keep that file available while using this link. If you move the download to a release asset, update the README to the asset's download URL.
-
-Create a GitHub release with tag **v1.2** and title **Coat 1.2**. Use the matching section from `docs/CHANGELOG-English.md` for the release description. Attach **Coat-1.2-Windows-x64.zip** as a release asset.
+The README links to the published 1.1.0 Windows ZIP. Create release **v1.3.6**, attach **Coat-1.3.6-Windows-x64.zip**, and update the first README link and version label to match the published asset. Use the English changelog for the release notes.
 
 GitHub automatically generates source-code archives. Those archives are for developers; they do not contain the generated Windows executable. The release asset is the package intended for end users.
 

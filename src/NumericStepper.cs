@@ -24,8 +24,9 @@ public partial class MainWindow
             input.Text = Math.Clamp(value + direction, minimum, maximum).ToString("0.###", CultureInfo.InvariantCulture);
         }
         var up = Button("▴", () => Adjust(1)); var down = Button("▾", () => Adjust(-1));
-        foreach (var b in new[] { up, down }) { b.Padding = new Thickness(0); b.FontSize = 10; b.Focusable = false; }
+        foreach (var b in new[] { up, down }) { b.Padding = new Thickness(0); b.FontSize = 10; b.Focusable = true; }
         AutomationProperties.SetName(up, L.F($"Augmenter {title}")); AutomationProperties.SetName(down, L.F($"Diminuer {title}"));
+        AutomationProperties.SetHelpText(up,L.T("Augmentez la valeur d’une unité.")); AutomationProperties.SetHelpText(down,L.T("Diminuez la valeur d’une unité."));
         up.ToolTip = AutomationProperties.GetName(up); down.ToolTip = AutomationProperties.GetName(down);
         arrows.Children.Add(up); Grid.SetRow(down, 1); arrows.Children.Add(down);
         input.PreviewKeyDown += (_, e) => { if (e.Key is Key.Up or Key.Down) { Adjust(e.Key == Key.Up ? 1 : -1); e.Handled = true; } };

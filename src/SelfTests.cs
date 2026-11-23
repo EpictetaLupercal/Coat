@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
@@ -41,6 +41,9 @@ public static class SelfTests
         string path = Path.Combine(output, "roundtrip.coat"); MainWindow.WriteAtomic(path, p.Serialize()); MainWindow.WriteAtomic(path, parsed.Serialize()); Check(File.ReadAllText(path) == p.Serialize(), "Atomic save and overwrite");
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         var window = new MainWindow { Shortcuts = new() { Bindings = ShortcutSettings.ErgonomicBindings() }, TestMode = true, ShowInTaskbar = false, Width = 1440, Height = 900 };
+        // Gesture tests supply canvas coordinates directly. Mouse capture can also
+        // deliver a real Windows mouse move at the desktop cursor between those calls.
+        window.Canvas.PreviewMouseMove += (_,e) => e.Handled=true;
         window.Show(); window.UpdateLayout(); Pump();
         MainWindow.SaveVisual((FrameworkElement)window.Content, Path.Combine(output, "coat-empty.png"));
         var canvas = window.Canvas;
@@ -94,6 +97,11 @@ public static class SelfTests
         window.Document.Background = null; window.Canvas.RefreshGeometry(); window.SetTool(EditorTool.Select); window.Width = 1050; window.Height = 680; window.Canvas.Fit(); window.UpdateLayout(); Pump(); MainWindow.SaveVisual((FrameworkElement)window.Content, Path.Combine(output, "coat-compact.png"));
         RunUpdateTests(window, Check, output);
         Update03Tests.Run(window, Check, output);
+        var appearanceWindow = new MainWindow { TestMode = true };
+        appearanceWindow.Show();
+        InterfaceLayoutTests.Run(appearanceWindow, Check, output);
+        appearanceWindow.Close(); window.Activate(); window.Canvas.Focus();
+        window.ChangeLanguage("fr");
         Update04Tests.Run(window, Check, output);
         Update05Tests.Run(window, Check, output);
         Update06Tests.Run(window, Check, output);
@@ -117,6 +125,9 @@ public static class SelfTests
         Update116Tests.Run(window, Check, output);
         Update117Tests.Run(window, Check, output);
         Update120Tests.Run(window, Check, output);
+        Update131Tests.Run(window, Check, output);
+        LuaPluginTests.Run(window, Check, output);
+
         window.Close(); app.Shutdown();
         File.WriteAllLines(Path.Combine(output, "results.txt"), results.Append($"\n{results.Count} checks passed."));
     }

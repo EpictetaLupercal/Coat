@@ -1,4 +1,45 @@
-# Coat 1.2 — Epicteta Lupercal
+# Coat 1.3.8 — Epicteta Lupercal
+
+## 1.3.8 — Inspector background
+
+- The inspector has a cooler background and subtler faceted shapes with shaded faces.
+
+## 1.3.7 — Levels preview
+
+- The three-quarter Levels preview has a little more vertical space in both window layouts.
+
+## 1.3.6 — Animated menu decorations
+
+- The menu bar and toolbar share one subtle animated circuit. The inspector scrolls a cached field of geometric facets that matches the selected theme. Turn off both backgrounds in **Preferences → Appearance**.
+- When animations are disabled in Windows, the decorations stay still.
+
+## 1.3.5 — Header logo
+
+- The official logo blends into the header with a transparent background and a single wordmark.
+
+## 1.3.4 — Official logo
+
+- The official Coat logo appears in the editor header, the Windows application icon and the README.
+
+## 1.3.3 — Button shortcuts
+
+- Command hints show the active keyboard shortcut in parentheses after the button name. Hold Shift to reveal the description.
+
+## 1.3.2 — Lua plugins
+
+- The Plugins menu discovers `.lua` files and addon folders with a `main.lua` entry point. It can open the plugin directory, show source code, and run a selected plugin.
+- The Lua API exposes grid and level information and lets plugins add rectangular outlines as a single undoable edit. Includes the Plan summary plugin.
+
+## 1.3.1 — Inspector and selection shortcuts
+
+- Drag the left edge of the right panel to resize it. The Levels preview is taller and sidebar commands use compact icons.
+- Drop-down menus use black text on white while the menu bar follows the selected theme.
+- With a selection, S, R and T activate Scale, Rotate and Move. Text and tokens can be resized or rotated on the canvas.
+
+## 1.3 — Compact interface and Bordeaux theme
+
+The toolbar and transform controls use accessible icons. Hold Shift over a command for details. The Groups and Map Export sections remember their expanded state during editing. Select Bordeaux in Preferences for burgundy panels, brass rules and ivory text.
+
 
 ## 1.2 — Color-aware .map geometry
 

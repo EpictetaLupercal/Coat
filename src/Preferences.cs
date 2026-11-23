@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -39,6 +39,8 @@ public class ShortcutSettings
     };
     public static readonly List<ShortcutAction> Actions = CreateActions();
     public Dictionary<string, Shortcut> Bindings { get; set; } = UnassignedBindings();
+    public string Theme { get; set; } = "classic";
+    public bool AnimatedMenus { get; set; } = true;
     public string Language { get; set; } = "en";
     public int ShortcutVersion { get; set; }
     public static readonly Shortcut Unassigned = new(Key.None, ModifierKeys.None);
@@ -107,6 +109,25 @@ public partial class MainWindow
     public ShortcutSettings Shortcuts { get; set; } = new();
     private static string PreferencesPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Coat", "preferences.json");
     private readonly List<(MenuItem Item, Shortcut Default)> shortcutMenus = new();
+    private static readonly Dictionary<string, (Key Key, TransformKind Transform)> selectionShortcuts = new()
+    {
+        ["Translation"] = (Key.T, TransformKind.Translation),
+        ["Rotation"] = (Key.R, TransformKind.Rotation),
+        ["Échelle"] = (Key.S, TransformKind.Scale)
+    };
+    private bool HasTransformSelection => Canvas.SelectionPoints().Count > 0 || Canvas.SelectedAnnotations.Count > 0;
+
+    internal string ButtonShortcut(string action)
+    {
+        var binding = Shortcuts.Bindings.GetValueOrDefault(action);
+        if (HasTransformSelection)
+        {
+            if (selectionShortcuts.TryGetValue(action, out var contextual)) return L.KeyName(contextual.Key);
+            if (binding is { Modifiers: ModifierKeys.None } && selectionShortcuts.Values.Any(value => value.Key == binding.Key))
+                return "";
+        }
+        return binding is { Key: not Key.None } ? binding.ToString() : "";
+    }
     public void LoadPreferences()
     {
         try { Shortcuts = ShortcutSettings.Load(PreferencesPath); ChangeLanguage(Shortcuts.Language); LoadRecent(); }
@@ -126,22 +147,26 @@ public partial class MainWindow
     private void RefreshShortcutHints()
     {
         foreach (var (item, original) in shortcutMenus) item.InputGestureText = CurrentHint(original);
-        foreach (var (tool, button) in toolButtons)
-        {
-            var key = tool switch { EditorTool.Select => Key.V, EditorTool.Draw => Key.D, EditorTool.Erase => Key.E, EditorTool.Paint => Key.C, EditorTool.Shapes => Key.R, EditorTool.Annotation => Key.T, _ => Key.None };
-            button.ToolTip = tool == EditorTool.Token ? L.T("Jetons") + (Shortcuts.Bindings["Jeton"].Key == Key.None ? "" : " · " + Shortcuts.Bindings["Jeton"]) : tool == EditorTool.Dimension ? L.T("Cote") + (Shortcuts.Bindings["Cote"].Key == Key.None ? "" : " · " + Shortcuts.Bindings["Cote"]) : CurrentHint(new(key, ModifierKeys.None));
-        }
         foreach (var pair in featureMenus) { var key = Shortcuts.Bindings[pair.Value]; pair.Key.InputGestureText = key.Key == Key.None ? "" : key.ToString(); }
         UpdateStatus();
     }
     public Window CreatePreferencesWindow(string? settingsPath = null)
     {
         var dialog = new Window { Owner = this, Title = L.T("Préférences"), Width = 680, Height = 740, MinWidth = 560, MinHeight = 400, WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Brushes.White, Foreground = Brushes.Black };
-        var root = new DockPanel { Margin = new Thickness(18), Background = Brushes.White }; dialog.Content = root;
+        var root = new DockPanel { Margin = new Thickness(18), Background = Brushes.White }; var frame = new Border { Child = root, Padding = new Thickness(3), Margin = new Thickness(4) };
+        var rim = new Border { Child = frame, Margin = new Thickness(4) }; var dialogHints = CommandHints.Wrap(this,dialog,rim,out var shell); dialog.Content=shell;
         var languageRow = new StackPanel { Margin = new Thickness(0, 0, 0, 18) }; DockPanel.SetDock(languageRow, Dock.Top); root.Children.Add(languageRow);
         languageRow.Children.Add(new TextBlock { Text = L.T("Langue de l’interface"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
         var language = new ComboBox { Width = 220, HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8), ItemsSource = new[] { "English", "Français" }, SelectedIndex = L.Language == "fr" ? 1 : 0 };
         System.Windows.Automation.AutomationProperties.SetName(language, L.T("Langue de l’interface")); languageRow.Children.Add(language);
+        languageRow.Children.Insert(0,new TextBlock { Text=L.T("Apparence"), FontSize=17, FontWeight=FontWeights.SemiBold });
+        var appearance = new DockPanel { Margin=new Thickness(0,6,0,8), LastChildFill=false };
+        appearance.Children.Add(new TextBlock { Text=L.T("Thème"), VerticalAlignment=VerticalAlignment.Center, Width=85 });
+        var theme = new ComboBox { ItemsSource=new[] { L.T("Classique"), "Bordeaux" }, Width=160, Height=30, SelectedIndex=IsBordeaux ? 1 : 0 };
+        System.Windows.Automation.AutomationProperties.SetName(theme,L.T("Thème"));
+        appearance.Children.Add(theme); languageRow.Children.Insert(1,appearance);
+        var animatedMenus = new CheckBox { Content = L.T("Décorations animées des menus"), IsChecked = Shortcuts.AnimatedMenus };
+        languageRow.Children.Insert(2, animatedMenus);
         languageRow.Children.Add(new TextBlock { Text = L.T("Le changement de langue s’applique à l’enregistrement, sans redémarrage."), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
         languageRow.Children.Add(new TextBlock { Text = L.T("Raccourcis clavier"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 20, 0, 0) });
         var intro = new TextBlock { Text = L.T("Les raccourcis sont facultatifs. Cliquez sur une touche pour la modifier, ou sur × pour la supprimer. Les conflits sont refusés. Les nouveaux raccourcis restent non attribués."), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) }; DockPanel.SetDock(intro, Dock.Top); root.Children.Add(intro);
@@ -160,14 +185,16 @@ public partial class MainWindow
             var matches = ShortcutSettings.Actions.Where(a => string.IsNullOrWhiteSpace(search.Text) || L.ShortcutLabel(a.Label).Contains(search.Text.Trim(), StringComparison.CurrentCultureIgnoreCase) || draft[a.Label].ToString().Contains(search.Text.Trim(), StringComparison.CurrentCultureIgnoreCase));
             foreach (var category in matches.GroupBy(a => a.Category))
             {
-                rows.Children.Add(new TextBlock { Text = L.T(category.Key), FontWeight = FontWeights.SemiBold, Foreground = Brushes.DimGray, Margin = new Thickness(0, 14, 0, 7) });
+                rows.Children.Add(new TextBlock { Text = L.T(category.Key), FontWeight = FontWeights.SemiBold, Foreground = IsBordeaux ? B("#A7B6C9") : Brushes.DimGray, Margin = new Thickness(0, 14, 0, 7) });
                 foreach (var action in category)
                 {
                 var row = new DockPanel { Margin = new Thickness(0, 0, 0, 5) };
                 var clear = new Button { Content = "×", Width = 28, Margin = new Thickness(4, 0, 0, 0), ToolTip = L.T("Effacer ce raccourci") };
+                System.Windows.Automation.AutomationProperties.SetName(clear,L.T("Effacer ce raccourci")); clear.ToolTip=L.ShortcutLabel(action.Label); dialogHints.Bind(clear);
                 clear.Click += (_, _) => { draft[action.Label] = ShortcutSettings.Unassigned; message.Text = ""; Populate(); };
                 DockPanel.SetDock(clear, Dock.Right); row.Children.Add(clear);
                 var capture = new Button { Content = draft[action.Label].ToString(), Width = 180, Padding = new Thickness(8), ToolTip = L.T("Cliquez puis pressez une combinaison") };
+                dialogHints.Bind(capture);
                 bool capturing = false;
                 capture.Click += (_, _) => { capturing = true; capture.Content = L.T("Pressez les touches…"); capture.Focus(); };
                 capture.PreviewKeyDown += (_, e) =>
@@ -187,13 +214,34 @@ public partial class MainWindow
             }
         }
         search.TextChanged += (_, _) => Populate();
-        void AddButton(string title, Action action) { var b = new Button { Content = title, Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(5), IsDefault = title == L.T("Enregistrer"), IsCancel = title == L.T("Annuler") }; b.Click += (_, _) => action(); buttons.Children.Add(b); }
+        void AddButton(string title, Action action) { var b = new Button { Content = title, Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(5), IsDefault = title == L.T("Enregistrer"), IsCancel = title == L.T("Annuler") }; dialogHints.Bind(b); b.Click += (_, _) => action(); buttons.Children.Add(b); }
         AddButton(L.T("Par défaut"), () => { draft = new ShortcutSettings().Bindings; language.SelectedIndex = 0; message.Text = ""; Populate(); });
         AddButton(L.T("Ergonomique"), () => { draft = ShortcutSettings.ErgonomicBindings(); message.Text = ""; Populate(); });
         AddButton(L.T("Classique"), () => { draft = ShortcutSettings.ClassicBindings(); message.Text = ""; Populate(); });
         AddButton(L.T("Annuler"), dialog.Close);
-        AddButton(L.T("Enregistrer"), () => { try { var next = new ShortcutSettings { Bindings = draft, Language = language.SelectedIndex == 1 ? "fr" : "en" }; next.Save(settingsPath ?? PreferencesPath); Shortcuts = next; dialog.Close(); ChangeLanguage(next.Language); } catch (Exception ex) { message.Text = L.T("Enregistrement impossible : ") + ex.Message; } });
-        Populate(); return dialog;
+        AddButton(L.T("Enregistrer"), () => { try { var next = new ShortcutSettings { Bindings = draft, Theme = Shortcuts.Theme, AnimatedMenus = animatedMenus.IsChecked == true, Language = language.SelectedIndex == 1 ? "fr" : "en" }; next.Save(settingsPath ?? PreferencesPath); Shortcuts = next; dialog.Close(); ChangeLanguage(next.Language); } catch (Exception ex) { message.Text = L.T("Enregistrement impossible : ") + ex.Message; } });
+        void StyleDialog()
+        {
+            dialogHints.RefreshPalette();
+            dialog.Resources = IsBordeaux ? Resources : new ResourceDictionary();
+            dialog.Background = root.Background = search.Background = MenuBack;
+            dialog.Foreground = search.Foreground = MenuInk;
+            message.Foreground = IsBordeaux ? B("#E3A0A9") : Brushes.DarkRed;
+            frame.BorderBrush = rim.BorderBrush = B("#364455");
+            frame.BorderThickness = rim.BorderThickness = new Thickness(IsBordeaux ? 1 : 0);
+            Populate();
+        }
+        bool revertingTheme=false;
+        theme.SelectionChanged += (_,_) =>
+        {
+            if(revertingTheme) return;
+            var previous = Shortcuts.Theme;
+            Shortcuts.Theme = theme.SelectedIndex == 1 ? "bordeaux" : "classic";
+            try { Shortcuts.Save(settingsPath ?? PreferencesPath); }
+            catch(Exception ex) { Shortcuts.Theme = previous; revertingTheme=true; theme.SelectedIndex = IsBordeaux ? 1 : 0; revertingTheme=false; message.Text = ex.Message; return; }
+            ChangeLanguage(L.Language); StyleDialog();
+        };
+        StyleDialog(); return dialog;
     }
     private void ShowPreferences() { Canvas.CancelGesture(); CreatePreferencesWindow().ShowDialog(); }
 }

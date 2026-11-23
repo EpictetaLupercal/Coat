@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,7 +31,7 @@ internal static class Update113Tests
         c.SelectAll();w.Duplicate();check(w.Document.Edges.All(e=>e.DimensionFontSize==36),"Duplicate retains dimension font size");w.Undo();
         c.ClearSelection();w.SetTool(EditorTool.Draw);Click(new(-256,-128));Click(new(256,-128));c.Anchor=null;
         check(w.Document.Edges.Count(e=>e.Dimension)==1&&w.Document.Edges.Count(e=>!e.Dimension)==1,"Switching back to Draw creates ordinary lines after dimension drawing");
-        c.ClearSelection();w.SetTool(EditorTool.Dimension);w.UpdateInspector();font=Desc<TextBox>(w).Single(t=>AutomationProperties.GetName(t)=="Font Size");font.Text="24";Desc<Button>(w).Single(b=>Equals(b.Content,"Apply Dimension")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        c.ClearSelection();w.SetTool(EditorTool.Dimension);w.UpdateInspector();font=Desc<TextBox>(w).Single(t=>AutomationProperties.GetName(t)=="Font Size");font.Text="24";Desc<Button>(w).Single(b=>System.Windows.Automation.AutomationProperties.GetName(b)=="Apply Dimension").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Click(new(-256,128));Click(new(256,128));check(w.Document.Edges.Last().Dimension&&w.Document.Edges.Last().DimensionFontSize==24,"Dimension tool font setting applies to newly created dimensions");
         w.SetTool(EditorTool.Select);c.SelectedEdges.Add(w.Document.Edges.First(e=>e.Dimension).Id);w.UpdateInspector();c.Fit();w.UpdateLayout();Pump();
         MainWindow.SaveVisual((FrameworkElement)w.Content,Path.Combine(output,"coat-113-selected.png"));w.ExportPngTo(Path.Combine(output,"coat-113-fonts.png"));

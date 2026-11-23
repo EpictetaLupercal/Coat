@@ -1,4 +1,45 @@
-# Coat 1.2 — Epicteta Lupercal
+# Coat 1.3.8 — Epicteta Lupercal
+
+## 1.3.8 — Fond de l’inspecteur
+
+- Le fond de l’inspecteur adopte une teinte plus froide et des formes plus discrètes dont les faces ombrées donnent du relief.
+
+## 1.3.7 — Aperçu des niveaux
+
+- L’aperçu en trois quarts des niveaux gagne un peu de hauteur dans les deux dispositions de fenêtre.
+
+## 1.3.6 — Décorations animées des menus
+
+- Un seul tracé cyberpunk anime les deux barres. Les facettes de l’inspecteur reprennent le thème actif et défilent à partir d’une image mise en cache. Désactivez les deux fonds dans **Préférences → Apparence**.
+- Les motifs restent fixes lorsque les animations sont désactivées dans Windows.
+
+## 1.3.5 — Logo dans l’en-tête
+
+- Le fond transparent du logo laisse apparaître le thème et le nom Coat s’affiche une seule fois.
+
+## 1.3.4 — Logo officiel
+
+- Le logo officiel de Coat apparaît dans l’en-tête, sur l’icône Windows et dans le README.
+
+## 1.3.3 — Raccourcis des boutons
+
+- Les infobulles affichent le raccourci actif entre parenthèses après le nom du bouton. Maintenez Maj pour lire la description.
+
+## 1.3.2 — Plugins Lua
+
+- Le menu Plugins détecte les fichiers `.lua` et les extensions dont le dossier contient un `main.lua`. Il permet d’ouvrir le dossier, de lire le code et de lancer une extension.
+- L’API Lua donne accès à la grille et aux niveaux. Elle permet d’ajouter des contours rectangulaires en une opération annulable. Le plugin Plan summary est fourni.
+
+## 1.3.1 — Panneau droit et raccourcis de transformation
+
+- Glissez le bord gauche du panneau droit pour régler sa largeur. L’aperçu des niveaux est plus haut et les commandes utilisent des icônes compactes.
+- Les menus déroulants utilisent du texte noir sur blanc. La barre de menus suit le thème choisi.
+- Avec une sélection, S, R et T activent la mise à l’échelle, la rotation et le déplacement. Les textes et jetons se redimensionnent et pivotent sur le plan.
+
+## 1.3 — Interface compacte et thème Bordeaux
+
+Les outils et transformations utilisent des icônes. Maintenez Maj au survol pour lire leur description. Les sections Groupes et Export .map mémorisent leur ouverture pendant la session. Le thème Bordeaux se choisit dans Préférences → Apparence.
+
 
 ## 1.2 — Export .map selon la couleur
 

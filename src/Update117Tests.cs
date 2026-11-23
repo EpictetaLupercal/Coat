@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,7 +14,13 @@ internal static class Update117Tests
         var p=new Plan();p.Polygon(new V2[]{new(0,0),new(128,0),new(128,128),new(0,128)});p.Polygon(new V2[]{new(256,0),new(384,0),new(384,128),new(256,128)});
         p.GroupSelection(p.Vertices.Select(v=>v.Id),p.Edges.Select(e=>e.Id));string original=p.Serialize();
         w.LoadDocument(p,"");w.SetTool(EditorTool.Select);var c=w.Canvas;c.Mode=SelectionMode.Edge;c.Zoom=1;c.Transform=TransformKind.Translation;
-        Button Toggle()=>Desc<Button>(w).Single(b=>AutomationProperties.GetName(b)=="Ignore Groups");
+        Button Toggle()
+        {
+            w.UpdateLayout();
+            var section=Desc<Expander>(w).Single(e=>Equals(e.Header,"GROUPS"));
+            section.IsExpanded=true; w.UpdateLayout();
+            return Desc<Button>(section).Single(b=>AutomationProperties.GetName(b)=="Ignore Groups");
+        }
         void Click(V2 a,int count=1){c.PointerDown(c.Screen(a),MouseButton.Left,count);c.PointerUp(MouseButton.Left);}
         check(Toggle()!=null&&!c.GroupsIgnored,"Ignore Groups button is available before selecting anything");
         Toggle().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));check(c.IgnoreGroups&&c.GroupsIgnored&&w.Document.Serialize()==original&&!w.History.CanUndo,"Group-selection toggle changes interaction only, preserving document and history");

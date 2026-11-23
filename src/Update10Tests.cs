@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -43,13 +43,13 @@ internal static class Update10Tests
         var savedColors = window.SavedColors.Colors.ToArray(); string state = plan.Serialize(); var selected = window.Canvas.SelectedEdges.ToArray();
         window.ChangeLanguage("en"); window.UpdateLayout(); Pump();
         var menus = Desc<Menu>(window).Single().Items.OfType<MenuItem>().ToList();
-        check(menus.Select(m => (string)m.Header).SequenceEqual(new[] { "File", "Edit", "View", "Help" }), "Switching to English updates all top-level menus immediately");
+        check(menus.Select(m => (string)m.Header).SequenceEqual(new[] { "File", "Edit", "View", "Plugins", "Help" }), "Switching to English updates all top-level menus immediately");
         check((string)((MenuItem)menus[1].Items[0]).Header == "Undo" && L.T("Annuler") == "Cancel", "Undo history and Cancel dialog actions use distinct English terms");
         check(window.Document.Serialize() == state && window.Canvas.SelectedEdges.SetEquals(selected) && window.Canvas.Center == new V2(128, 64) && window.Canvas.Zoom == .9 && window.Canvas.ShowUpperLevels, "Changing language preserves the open plan, selection, view, and display options");
         check(window.SavedColors.Colors.SequenceEqual(savedColors) && window.Shortcuts.Bindings["Dessin"] == new Shortcut(Key.F6, ModifierKeys.Control), "Changing language preserves the palette and custom key bindings");
         check(plan.Annotations[0].Text == "Annuler\nPorte à gauche" && plan.Groups[0].Name == "Groupe français — Points", "User-authored annotations and group names are never translated");
         var texts = Desc<TextBlock>(window).Select(t => t.Text).ToHashSet();
-        check(texts.Contains("•  Vertices") && texts.Contains("╱  Edges") && texts.Contains("▱  Faces") && new[] { "Move", "Rotate", "Scale" }.All(texts.Contains), "Geometry and transform controls use standard editor terminology");
+        check(new[] { "•  Vertices", "╱  Edges", "▱  Faces" }.All(name => Desc<Button>(window).Any(b => AutomationProperties.GetName(b) == name)) && new[] { "Move", "Rotate", "Scale" }.All(name => Desc<Button>(window).Any(b => AutomationProperties.GetName(b) == name)), "Geometry and transform controls use standard editor terminology");
         check(menus[0].Items.OfType<MenuItem>().Single(m => (string)m.Header == "Save As…").InputGestureText == "Ctrl+Shift+S", "English menu hints use Shift instead of the French Maj label");
         Key key = Key.F6; var modifiers = ModifierKeys.Control;
         check(window.Shortcuts.Translate(ref key, ref modifiers) && key == Key.D, "Custom key bindings keep the same action after a language change");
@@ -58,7 +58,7 @@ internal static class Update10Tests
         MainWindow.SaveVisual((FrameworkElement)window.Content, Path.Combine(output, "coat-10-selection-en.png"));
 
         var preferences = window.CreatePreferencesWindow(settingsPath); preferences.Show(); preferences.UpdateLayout(); Pump();
-        var language = Desc<ComboBox>(preferences).Single();
+        var language = Desc<ComboBox>(preferences).Single(c => c.Items.Contains("English"));
         check(language.Items.Cast<string>().SequenceEqual(new[] { "English", "Français" }) && language.SelectedIndex == 0, "Preferences expose English and Français with the active language selected");
         var labels = Desc<TextBlock>(preferences).Select(t => t.Text).ToHashSet();
         check(ShortcutSettings.Actions.All(a => labels.Contains(L.ShortcutLabel(a.Label))) && labels.Contains("Vertex Selection") && labels.Contains("Grid 32 units (numpad)"), "Every shortcut action, including grid and numpad actions, has an English display name");
@@ -69,18 +69,18 @@ internal static class Update10Tests
         preferences = window.CreatePreferencesWindow(settingsPath); preferences.Show(); preferences.UpdateLayout(); Pump();
         MainWindow.SaveVisual(preferences, Path.Combine(output, "coat-10-preferences-fr.png"));
         string savedPreferences = File.ReadAllText(settingsPath);
-        Desc<ComboBox>(preferences).Single().SelectedIndex = 0; ActionButton(preferences, "Annuler").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Desc<ComboBox>(preferences).Single(c => c.Items.Contains("English")).SelectedIndex = 0; ActionButton(preferences, "Annuler").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         check(L.Language == "fr" && File.ReadAllText(settingsPath) == savedPreferences, "Cancelling a language choice leaves the active and saved preferences unchanged");
         preferences = window.CreatePreferencesWindow(settingsPath); preferences.Show(); preferences.UpdateLayout(); Pump();
-        Desc<ComboBox>(preferences).Single().SelectedIndex = 0; ActionButton(preferences, "Enregistrer").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); window.UpdateLayout(); Pump();
+        Desc<ComboBox>(preferences).Single(c => c.Items.Contains("English")).SelectedIndex = 0; ActionButton(preferences, "Enregistrer").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); window.UpdateLayout(); Pump();
         check(L.Language == "en" && ShortcutSettings.Load(settingsPath).Language == "en" && window.Shortcuts.Bindings["Dessin"] == new Shortcut(Key.F6, ModifierKeys.Control), "Returning to English persists the choice and retains customized shortcuts");
         window.Mutate(() => window.Document.Segment(new(384, 0), new(512, 0))); window.ChangeLanguage("fr"); window.ChangeLanguage("en"); window.Undo();
         check(window.Document.Serialize() == state, "Undo history survives repeated language changes");
 
         window.SetTool(EditorTool.Paint); window.Canvas.PaintLines = false; window.UpdateInspector(); window.UpdateLayout(); Pump();
-        check(Desc<Button>(window).Any(b => System.Windows.Automation.AutomationProperties.GetName(b) == "Dots") && Desc<Button>(window).Any(b => b.Content as string == "Fill faces"), "Fill pattern dots are distinguished from geometric vertices");
+        check(Desc<Button>(window).Any(b => System.Windows.Automation.AutomationProperties.GetName(b) == "Dots") && Desc<Button>(window).Any(b => (b.Content as string == "Fill faces" || System.Windows.Automation.AutomationProperties.GetName(b) == "Fill faces")), "Fill pattern dots are distinguished from geometric vertices");
         window.Canvas.PaintLines = true; window.UpdateInspector(); window.UpdateLayout(); Pump();
-        check(Desc<Button>(window).Any(b => b.Content as string == "Long dashes") && Desc<Button>(window).Any(b => b.Content as string == "Short dashes"), "Line styles use precise dashed-line terminology");
+        check(Desc<Button>(window).Any(b => (b.Content as string == "Long dashes" || System.Windows.Automation.AutomationProperties.GetName(b) == "Long dashes")) && Desc<Button>(window).Any(b => (b.Content as string == "Short dashes" || System.Windows.Automation.AutomationProperties.GetName(b) == "Short dashes")), "Line styles use precise dashed-line terminology");
         var picker = new ColorPicker(window, "#448855"); picker.Show(); picker.UpdateLayout(); Pump();
         check(System.Windows.Automation.AutomationProperties.GetName(picker) == "Color Picker — Coat" && Desc<Button>(picker).Any(b => System.Windows.Automation.AutomationProperties.GetName(b) == "Eyedropper" && b.Content is Image) && Desc<TextBlock>(picker).Any(t => t.Text == "Saved colors") && Desc<TextBlock>(picker).Any(t => t.Text.Contains("G 136")), "Color picker, saved colors, eyedropper, and RGB labels are localized");
         MainWindow.SaveVisual(picker, Path.Combine(output, "coat-10-color-picker-en.png")); picker.Close();

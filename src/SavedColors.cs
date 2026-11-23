@@ -53,11 +53,13 @@ internal sealed class ColorPalette
 internal sealed class PaletteView : UniformGrid
 {
     private readonly ColorPalette palette;
+    private readonly MainWindow? owner;
+    private readonly CommandHints? hints;
     private readonly Action<string> choose, report;
     private readonly Func<string> current;
-    public PaletteView(ColorPalette palette, Action<string> choose, Func<string> current, Action<string> report)
+    public PaletteView(ColorPalette palette, Action<string> choose, Func<string> current, Action<string> report, MainWindow? owner = null, CommandHints? hints = null)
     {
-        this.palette = palette; this.choose = choose; this.current = current; this.report = report;
+        this.hints=hints; this.owner=owner; this.palette = palette; this.choose = choose; this.current = current; this.report = report;
         Columns = 6; Rows = 2;
         Loaded += (_, _) => { palette.Changed += Refresh; Refresh(); };
         Unloaded += (_, _) => palette.Changed -= Refresh;
@@ -85,9 +87,10 @@ internal sealed class PaletteView : UniformGrid
                 var menu = new ContextMenu { Background = Brushes.White, Foreground = Brushes.Black };
                 var delete = new MenuItem { Header = L.T("Supprimer"), Background = Brushes.White, Foreground = Brushes.Black };
                 delete.Click += (_, _) => { try { palette.Delete(index); } catch (Exception ex) { report(L.T("Palette non enregistrée : ") + ex.Message); } };
+                if(owner?.IsBordeaux == true) { menu.Resources=owner.Resources; menu.BorderBrush=Brushes.LightGray; }
                 menu.Items.Add(delete); swatch.ContextMenu = menu;
             }
-            Children.Add(swatch);
+            hints?.Bind(swatch); Children.Add(swatch);
         }
     }
 }

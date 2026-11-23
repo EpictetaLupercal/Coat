@@ -38,16 +38,17 @@ public partial class MainWindow
     }
     private void ShowOrganization()
     {
-        var dialog = new Window { Owner = this, Title = L.T("Organisation"), Width = 470, Height = 600, Background = Brushes.White, Foreground = Brushes.Black, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var dialog = new Window { Owner = this, Title = L.T("Organisation"), Width = 470, Height = 600, Background = MenuBack, Foreground = MenuInk, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        if(IsBordeaux) dialog.Resources = Resources;
         var root = new DockPanel { Margin = new Thickness(16) }; dialog.Content = root;
         var done = new Button { Content = "OK", IsDefault = true, IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right, MinWidth = 80, Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 12, 0, 0) };
         done.Click += (_, _) => dialog.Close(); DockPanel.SetDock(done, Dock.Bottom); root.Children.Add(done);
         var title = new TextBlock { Text = L.T("Niveaux → Groupes → Formes"), Margin = new Thickness(0, 0, 0, 12), FontWeight = FontWeights.SemiBold };
         DockPanel.SetDock(title, Dock.Top); root.Children.Add(title);
-        var tree = new TreeView { Background = Brushes.White, Foreground = Brushes.Black }; root.Children.Add(tree);
+        var tree = new TreeView { Background = MenuBack, Foreground = MenuInk }; root.Children.Add(tree);
         var allFaces = Document.Faces(); var vertices = Document.Vertices.ToDictionary(v => v.Id);
         var groupPoints = Document.Groups.ToDictionary(g => g.Id, Document.GroupPoints);
-        TreeViewItem Node(string label, Action select) { var n = new TreeViewItem { Header = label, Foreground = Brushes.Black }; n.Selected += (_, e) => { e.Handled = true; select(); }; return n; }
+        TreeViewItem Node(string label, Action select) { var n = new TreeViewItem { Header = label, Foreground = MenuInk }; n.Selected += (_, e) => { e.Handled = true; select(); }; return n; }
         void AddFaces(TreeViewItem parent, IEnumerable<Face> source)
         {
             foreach (var face in source)

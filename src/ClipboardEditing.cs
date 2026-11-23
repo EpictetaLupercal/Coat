@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -71,7 +71,7 @@ public partial class MainWindow
         return fragment;
     }
     private static Annotation CloneNote(Annotation note, int id, V2 offset, int level) => new()
-    { Id = id, X = note.X + offset.X, Y = note.Y + offset.Y, Text = note.Text, Size = note.Size, Color = note.Color, Level = level, IsToken = note.IsToken, TokenShape = note.TokenShape };
+    { Id = id, X = note.X + offset.X, Y = note.Y + offset.Y, Text = note.Text, Size = note.Size, Rotation = note.Rotation, Color = note.Color, Level = level, IsToken = note.IsToken, TokenShape = note.TokenShape };
     private static void CopyFaceStyles(Plan source, Plan target, IReadOnlyDictionary<int, int> map, HashSet<int> edges)
     {
         foreach (var face in source.Faces().Where(f => source.FaceEdges(f).IsSubsetOf(edges) && f.Vertices.All(map.ContainsKey)))

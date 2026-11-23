@@ -8,10 +8,11 @@ public partial class MainWindow
 {
     private readonly Dictionary<string, Action> menuCommands = new(), inspectorCommands = new();
     private readonly Dictionary<MenuItem, string> featureMenus = new();
-    private void RegisterFeature(string title, Action action, bool menu = false)
+    private string? RegisterFeature(string title, Action action, bool menu = false)
     {
         var id = ShortcutSettings.FeatureLabels.FirstOrDefault(label => L.T(label) == title);
         if (id != null) (menu ? menuCommands : inspectorCommands)[id] = action;
+        return id;
     }
     internal bool ExecuteFeature(string id)
     {

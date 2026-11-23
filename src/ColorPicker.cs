@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -100,11 +100,11 @@ internal sealed class ColorPicker : Border
     internal string SelectedHex => ColorMath.Hex(ColorMath.FromHsv(Wheel.Hue, Wheel.Saturation, Wheel.Value));
     internal ColorPicker(MainWindow owner, string initial)
     {
-        this.owner = owner; Width = 370; Padding = new Thickness(12); CornerRadius = new CornerRadius(9); BorderBrush = EditorCanvas.Brush("#647387"); BorderThickness = new Thickness(1);
-        Background = EditorCanvas.Brush("#1B2430"); Resources = owner.Resources; Language = owner.Language;
-        TextElement.SetForeground(this,EditorCanvas.Brush("#DCE4ED")); TextElement.SetFontFamily(this,owner.FontFamily); TextElement.SetFontSize(this,12);
+        this.owner = owner; Width = 370; Padding = new Thickness(12); CornerRadius = new CornerRadius(9); BorderBrush = owner.ChromeBrush("#364455"); BorderThickness = new Thickness(1);
+        Background = owner.ChromeBrush("#1B2430"); Resources = owner.Resources; Language = owner.Language;
+        TextElement.SetForeground(this,owner.ChromeBrush("#DCE4ED")); TextElement.SetFontFamily(this,owner.FontFamily); TextElement.SetFontSize(this,12);
         System.Windows.Automation.AutomationProperties.SetName(this,L.T("Palette de couleurs — Coat"));
-        var root = new StackPanel(); Child = root;
+        var root = new StackPanel(); var hints=CommandHints.Wrap(owner,owner,root,out var shell); Child=shell;
         var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(206) }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.Children.Add(Wheel); root.Children.Add(row);
         var controls = new StackPanel { Margin = new Thickness(8,2,0,0) }; Grid.SetColumn(controls,1); row.Children.Add(controls);
         void SliderRow(string title, Slider slider)
@@ -126,12 +126,13 @@ internal sealed class ColorPicker : Border
         HexInput.TextChanged += (_,_) => { if (updating) return; if (ColorMath.TryHex(HexInput.Text,out var color)) { SetColor(color,false); error.Text=""; } else error.Text=L.T("Utilisez six chiffres hexadécimaux : #66C5AD."); };
         root.Children.Add(new TextBlock { Text=L.T("Couleurs enregistrées"), Margin=new Thickness(0,0,0,6) });
         var paletteRow = new StackPanel { Orientation=Orientation.Horizontal }; root.Children.Add(paletteRow);
-        palette = new PaletteView(owner.SavedColors,color=> { ColorMath.TryHex(color,out var chosen); SetColor(chosen); },()=>SelectedHex,message=>error.Text=message) { Width=230 }; paletteRow.Children.Add(palette);
+        palette = new PaletteView(owner.SavedColors,color=> { ColorMath.TryHex(color,out var chosen); SetColor(chosen); },()=>SelectedHex,message=>error.Text=message,owner,hints) { Width=230 }; paletteRow.Children.Add(palette);
         var add = new Button { Content="+", FontSize=22, Width=34, Height=34, Padding=new Thickness(0), Margin=new Thickness(5,0,5,0), VerticalAlignment=VerticalAlignment.Top, ToolTip=L.T("Enregistrer dans le premier emplacement vide") };
         System.Windows.Automation.AutomationProperties.SetName(add,L.T("Enregistrer la couleur dans la palette"));
         add.Click += (_,_) => { if (!ColorMath.TryHex(HexInput.Text,out var color)) { error.Text=L.T("Couleur invalide : utilisez le format #RRGGBB."); return; } try { owner.SavedColors.Add(ColorMath.Hex(color)); error.Text=""; } catch(Exception ex) { error.Text=ex.Message; } }; paletteRow.Children.Add(add);
         var pick = new Button { Content=new Image { Source=ColorUi.EyedropperIcon(),Width=20,Height=20 }, Width=34,Height=34,Padding=new Thickness(4),VerticalAlignment=VerticalAlignment.Top,ToolTip=L.T("Prélever une couleur sur le plan ou son image de référence. Échap ou clic droit pour annuler.") };
         System.Windows.Automation.AutomationProperties.SetName(pick,L.T("Pipette")); pick.Click += (_,_) => owner.BeginColorSampling(this); paletteRow.Children.Add(pick);
+        hints.Bind(add); hints.Bind(pick);
         root.Children.Add(error);
         Wheel.Changed += () => Sync(); ColorMath.TryHex(initial,out var initialColor); SetColor(initialColor);
         PreviewKeyDown += (_,e) => { if (e.Key == Key.Escape) { Close(); e.Handled=true; } };

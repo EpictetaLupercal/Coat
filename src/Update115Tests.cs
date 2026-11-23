@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -47,6 +47,7 @@ internal static class Update115Tests
         var p=new Plan();p.Polygon(new V2[]{new(-128,-128),new(128,-128),new(128,128),new(-128,128)});string key=p.Faces().Single().Key;p.Fills[key]="#112233";p.Gradients[key]=new("#FFFFFF",0);
         w.LoadDocument(p,"");w.SetTool(EditorTool.Select);c.Mode=SelectionMode.Face;c.SelectAll();w.SetTool(EditorTool.Paint);c.PaintLines=false;c.GradientMode=true;w.UpdateInspector();wheel=Desc<Button>(w).Single(b=>AutomationProperties.GetName(b)=="End Color…");wheel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));w.ActiveColorPicker!.HexInput.Text="#ABCDEF";
         check(p.Gradients[key].EndColor=="#ABCDEF","Gradient end color changes directly on selected gradient faces");w.CloseColorPicker();
+        w.UpdateLayout(); Desc<Expander>(w).Single(e=>Equals(e.Header,"MAP EXPORT")).IsExpanded=true; w.UpdateLayout();
         wheel=Desc<Button>(w).Single(b=>AutomationProperties.GetName(b)=="Wall Color…");wheel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));w.ActiveColorPicker!.HexInput.Text="#334455";check(p.WallColor=="#334455","Wall classification color changes live");w.CloseColorPicker();
         c.ClearSelection();c.GradientMode=false;w.UpdateInspector();w.UpdateLayout();Pump();wheel=Desc<Button>(w).Single(b=>AutomationProperties.GetName(b)=="◉  Color wheel…");wheel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));picker=w.ActiveColorPicker!;picker.UpdateLayout();Pump();MainWindow.SaveVisual(picker,Path.Combine(output,"coat-115-popup-full.png"));MainWindow.SaveVisual((FrameworkElement)w.Content,Path.Combine(output,"coat-115-toolbar.png"));w.CloseColorPicker();
         check(L.Missing.Count==0,"Live color and token workflow remain localized");

@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -18,7 +18,7 @@ public partial class MainWindow : Window
     public EditorCanvas Canvas { get; }
     public History History { get; } = new();
     private StackPanel inspector = new();
-    private StackPanel levelsPanel = new() { Margin = new Thickness(20, 18, 20, 0) };
+    private StackPanel levelsPanel = new() { Margin = new Thickness(12, 9, 12, 0) };
     private TextBlock statusLeft = new(), statusRight = new();
     private readonly Dictionary<EditorTool, Button> toolButtons = new();
     private ComboBox gridChoice = new();
@@ -27,16 +27,20 @@ public partial class MainWindow : Window
     private string moveXText = "0", moveYText = "0";
     private bool updating;
     private bool compactLevels;
+    private double inspectorWidth = 276;
+    private readonly CommandHints hints;
     public bool TestMode { get; set; }
-    private static Brush B(string c) => EditorCanvas.Brush(c);
+    internal Brush ChromeBrush(string color) => B(color);
+    private Brush B(string c) => EditorCanvas.Brush(ChromeColor(c));
     public MainWindow()
     {
+        hints = new CommandHints(this);
         Title = AppVersion.Title; Width = 1440; Height = 900; MinWidth = 1050; MinHeight = 680;
         WindowStartupLocation = WindowStartupLocation.CenterScreen; Background = B("#141B25"); Foreground = B("#DCE4ED"); FontFamily = new FontFamily("Segoe UI"); FontSize = 13;
-        SetTheme(); Icon = MakeIcon(); Canvas = new EditorCanvas(this); Language = XmlLanguage.GetLanguage(L.Culture.Name);
+        SetTheme(); Icon = OfficialLogo; Canvas = new EditorCanvas(this); Language = XmlLanguage.GetLanguage(L.Culture.Name);
         BuildInterface();
         saved = Document.Serialize(); Canvas.RefreshGeometry(); UpdateInspector(); UpdateToolButtons(); UpdateStatus();
-        PreviewKeyDown += OnKey; PreviewKeyUp += (_, _) => Canvas.InvalidateVisual();
+        hints.Listen(this,this); PreviewKeyDown += OnKey; PreviewKeyUp += (_, _) => Canvas.InvalidateVisual();
         Closing += (_, e) => { Canvas.CancelGesture(); if (!TestMode && !CheckSave()) e.Cancel = true; };
         Loaded += (_, _) => Canvas.Focus();
         SizeChanged += (_, _) => { bool compact = ActualHeight < 760; if (compact != compactLevels) { compactLevels = compact; UpdateLevels(); } };
@@ -44,49 +48,90 @@ public partial class MainWindow : Window
     private void BuildInterface()
     {
         if (VisualTreeHelper.GetParent(Canvas) is Panel parent) parent.Children.Remove(Canvas);
-        inspector = new(); levelsPanel = new() { Margin = new Thickness(20, 18, 20, 0) };
+        inspector = new(); levelsPanel = new() { Margin = new Thickness(12, 9, 12, 0) };
         statusLeft = new(); statusRight = new(); gridChoice = new(); toolButtons.Clear(); shortcutMenus.Clear(); menuCommands.Clear(); featureMenus.Clear();
-        var root = new Grid { Background = B("#141B25") }; root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(48) }); root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(62) }); root.RowDefinitions.Add(new RowDefinition()); root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) }); Content = root;
-        var header = new DockPanel { LastChildFill = true, Margin = new Thickness(14, 0, 16, 0) };
-        var brand = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 28, 0) };
-        brand.Children.Add(new Border { Background = B("#78DCC1"), Width = 24, Height = 24, CornerRadius = new CornerRadius(5), Child = new TextBlock { Text = "C", Foreground = B("#13251F"), FontWeight = FontWeights.Bold, FontSize = 18, HorizontalAlignment = HorizontalAlignment.Center } });
-        brand.Children.Add(new TextBlock { Text = "coat", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(9, -4, 0, 0) }); header.Children.Add(brand);
-        var menu = new Menu { Background = Brushes.White, Foreground = Brushes.Black, VerticalAlignment = VerticalAlignment.Center };
-        var fm = Menu(L.T("Fichier")); Add(fm, L.T("Nouveau plan"), "Ctrl+N", New); Add(fm, L.T("Ouvrir…"), "Ctrl+O", Open); recentMenu = Menu(L.T("Ouvert récemment")); fm.Items.Add(recentMenu); UpdateRecentMenu(); Add(fm, L.T("Enregistrer"), "Ctrl+S", () => Save()); Add(fm, L.T("Enregistrer sous…"), "Ctrl+Maj+S", () => Save(true)); fm.Items.Add(new Separator()); Add(fm, L.T("Importer une image…"), "Ctrl+I", ImportImage); Add(fm, L.T("Exporter en PNG…"), "", ExportPng); Add(fm, L.T("Exporter en SVG…"), "", ExportSvg); Add(fm, L.T("Exporter en .map…"), "", ExportMap); fm.Items.Add(new Separator()); Add(fm, L.T("Charger le plan d’exemple"), "", LoadDemo); Add(fm, L.T("Quitter"), "Alt+F4", Close); menu.Items.Add(fm);
+        var root = new Grid { Background = B("#141B25") }; root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(38) }); root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(48) }); root.RowDefinitions.Add(new RowDefinition()); root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) }); Content = root; hints.Install(root);
+        var toolbarBorder = new Border { Background = B("#1B2430"), BorderBrush = B("#2B3645"), BorderThickness = new Thickness(0, 1, 0, 1) };
+        Grid.SetRow(toolbarBorder, 1);
+        root.Children.Add(toolbarBorder);
+        if (Shortcuts.AnimatedMenus)
+        {
+            var circuit = new MenuDecoration(MenuSurface.Top, IsBordeaux);
+            Grid.SetRowSpan(circuit, 2);
+            root.Children.Add(circuit);
+        }
+        var header = new DockPanel { LastChildFill = false, Margin = new Thickness(14, 0, 16, 0) };
+        var brand = new Image
+        {
+            Source = HeaderLogo, Width = 48, Height = 34, Stretch = Stretch.Uniform,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 18, 0)
+        };
+        System.Windows.Automation.AutomationProperties.SetName(brand, "Coat");
+        header.Children.Add(brand);
+        var menu = new Menu { Background = MenuBack, Foreground = MenuInk, VerticalAlignment = VerticalAlignment.Center };
+        var fm = Menu(L.T("Fichier")); Add(fm, L.T("Nouveau plan"), "Ctrl+N", New); Add(fm, L.T("Ouvrir…"), "Ctrl+O", Open); recentMenu = DropDownItem(L.T("Ouvert récemment")); fm.Items.Add(recentMenu); UpdateRecentMenu(); Add(fm, L.T("Enregistrer"), "Ctrl+S", () => Save()); Add(fm, L.T("Enregistrer sous…"), "Ctrl+Maj+S", () => Save(true)); fm.Items.Add(new Separator()); Add(fm, L.T("Importer une image…"), "Ctrl+I", ImportImage); Add(fm, L.T("Exporter en PNG…"), "", ExportPng); Add(fm, L.T("Exporter en SVG…"), "", ExportSvg); Add(fm, L.T("Exporter en .map…"), "", ExportMap); fm.Items.Add(new Separator()); Add(fm, L.T("Charger le plan d’exemple"), "", LoadDemo); Add(fm, L.T("Quitter"), "Alt+F4", Close); menu.Items.Add(fm);
         var em = Menu(L.T("Édition")); Add(em, L.Undo, "Ctrl+Z", Undo); Add(em, L.T("Rétablir"), "Ctrl+Y", Redo); em.Items.Add(new Separator()); Add(em, L.T("Tout sélectionner"), "Ctrl+A", Canvas.SelectAll); Add(em, L.T("Dupliquer la sélection"), "Ctrl+D", Duplicate); Add(em, L.T("Supprimer la sélection"), L.T("Suppr"), Canvas.DeleteSelection); menu.Items.Add(em);
         Add(em, L.T("Grouper la sélection"), "Ctrl+G", GroupSelection); Add(em, L.T("Dissocier les groupes"), "Ctrl+Maj+G", UngroupSelection);
         Add(em, L.T("Copier"), "Ctrl+C", () => CopySelection()); Add(em, L.T("Couper"), "Ctrl+X", CutSelection); Add(em, L.T("Coller"), "Ctrl+V", PasteSelection);
         Add(em, L.T("Préférences…"), "Ctrl+OemComma", ShowPreferences);
         var vm = Menu(L.T("Affichage")); Add(vm, L.T("Cadrer le plan"), L.T("Origine"), Canvas.Fit); Add(vm, L.T("Revenir à l’origine"), "", () => { Canvas.Center = new(); Canvas.Zoom = 1; Canvas.InvalidateVisual(); UpdateStatus(); }); Add(vm, L.T("Afficher / masquer la grille"), "G", () => { Canvas.ShowGrid = !Canvas.ShowGrid; Canvas.InvalidateVisual(); }); Add(vm, L.T("Afficher / masquer les longueurs"), "M", () => { Canvas.ShowLengths = !Canvas.ShowLengths; Canvas.InvalidateVisual(); }); Add(vm, L.T("Afficher les niveaux supérieurs"), "H", ToggleUpperLevels); upperLevelsMenu = (MenuItem)vm.Items[vm.Items.Count - 1]; upperLevelsMenu.IsCheckable = true; Add(vm, L.T("Afficher les niveaux inférieurs"), "Shift+H", ToggleLowerLevels); lowerLevelsMenu = (MenuItem)vm.Items[vm.Items.Count - 1]; lowerLevelsMenu.IsCheckable = true; lowerLevelsMenu.IsChecked = Canvas.ShowLowerLevels; Add(vm, L.T("Organisation"), "", ShowOrganization); menu.Items.Add(vm);
+        menu.Items.Add(BuildPluginsMenu());
         var hm = Menu(L.T("Aide")); Add(hm, L.T("Raccourcis et prise en main"), "F1", Help); Add(hm, L.T("À propos de Coat"), "", () => AppDialog.Show(this, AppVersion.Title + "\n\nEpicteta Lupercal\n\n" + L.T("Éditeur de plans et blueprints pour level design."), L.T("À propos de Coat"), MessageBoxButton.OK, MessageBoxImage.Information)); menu.Items.Add(hm); header.Children.Add(menu);
-        var version = new TextBlock { Text = "EPICTETA LUPERCAL  /  " + AppVersion.Number, FontSize = 10, Foreground = B("#728196"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right }; DockPanel.SetDock(version, Dock.Right); header.Children.Add(version); root.Children.Add(header);
-        var toolbar = new DockPanel { Margin = new Thickness(12, 8, 12, 8), LastChildFill = false };
-        var toolbarBorder = new Border { Background = B("#1B2430"), BorderBrush = B("#2B3645"), BorderThickness = new Thickness(0, 1, 0, 1), Child = toolbar }; Grid.SetRow(toolbarBorder, 1); root.Children.Add(toolbarBorder);
-        AddTool(toolbar, EditorTool.Select, "↖", L.T("Sélection"), "V"); AddTool(toolbar, EditorTool.Draw, "╱", L.T("Dessin"), "D"); AddTool(toolbar, EditorTool.Dimension, "↔", L.T("Cote"), ""); AddTool(toolbar, EditorTool.Erase, "⌫", L.T("Gomme"), "E"); AddTool(toolbar, EditorTool.Paint, "◐", L.T("Couleur"), "C");
-        AddTool(toolbar, EditorTool.Shapes, "▱", L.T("Shapes"), "R");
-        AddTool(toolbar, EditorTool.Annotation, "T", L.T("Texte"), "T");
-        AddTool(toolbar, EditorTool.Token, "●", L.T("Jetons"), "");
+        var version = new TextBlock { Text = "EPICTETA LUPERCAL  /  " + AppVersion.Number, FontSize = 10, Foreground = B("#728196"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right }; DockPanel.SetDock(version, Dock.Right); header.Children.Add(version);
+        root.Children.Add(header);
+        var toolbar = new DockPanel { Margin = new Thickness(12, 5, 12, 5), LastChildFill = false };
+        Grid.SetRow(toolbar, 1);
+        root.Children.Add(toolbar);
+        AddTool(toolbar, EditorTool.Select, L.T("Sélection")); AddTool(toolbar, EditorTool.Draw, L.T("Dessin")); AddTool(toolbar, EditorTool.Dimension, L.T("Cotation")); AddTool(toolbar, EditorTool.Erase, L.T("Gomme")); AddTool(toolbar, EditorTool.Paint, L.T("Couleur"));
+        AddTool(toolbar, EditorTool.Shapes, L.T("Shapes"));
+        AddTool(toolbar, EditorTool.Annotation, L.T("Texte"));
+        AddTool(toolbar, EditorTool.Token, L.T("Jetons"));
         toolbar.Children.Add(new Border { Background = B("#354151"), Width = 1, Margin = new Thickness(12, 5, 14, 5) });
         toolbar.Children.Add(new TextBlock { Text = L.T("GRILLE"), FontSize = 10, Foreground = B("#96A4B6"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
         gridChoice.Width = 108; gridChoice.Height = 32; gridChoice.VerticalAlignment = VerticalAlignment.Center;
         foreach (var step in steps) gridChoice.Items.Add(step + L.T(" unités")); gridChoice.SelectedIndex = 5;
         gridChoice.SelectionChanged += (_, _) => { if (!updating && gridChoice.SelectedIndex >= 0) SetGrid(steps[gridChoice.SelectedIndex]); }; toolbar.Children.Add(gridChoice);
-        var save = Button(L.T("Enregistrer"), () => Save()); save.Margin = new Thickness(10, 0, 0, 0); save.ToolTip = L.T("Enregistrer") + " · " + CurrentHint(new(Key.S, ModifierKeys.Control)); DockPanel.SetDock(save, Dock.Right); toolbar.Children.Add(save);
-        var fit = Button(L.T("⊞  Cadrer"), Canvas.Fit); fit.ToolTip = L.T("Cadrer le plan") + " · " + CurrentHint(new(Key.Home, ModifierKeys.None)); DockPanel.SetDock(fit, Dock.Right); toolbar.Children.Add(fit);
-        var body = new Grid(); body.ColumnDefinitions.Add(new ColumnDefinition()); body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(294) }); Grid.SetRow(body, 2); root.Children.Add(body); body.Children.Add(Canvas);
-        var sidebar = new Border { Background = B("#1B2430"), BorderBrush = B("#303B49"), BorderThickness = new Thickness(1, 0, 0, 0) };
-        Grid.SetColumn(sidebar, 1); body.Children.Add(sidebar);
-        var sideLayout = new DockPanel(); sidebar.Child = sideLayout;
+        var save = Button(L.T("Enregistrer"), () => Save(), "Enregistrer"); IconButton(save,L.T("Enregistrer"),SaveGlyph,L.T("Enregistrez le plan en cours.")); DockPanel.SetDock(save, Dock.Right); toolbar.Children.Add(save);
+        var fit = Button("", Canvas.Fit, "Cadrer"); IconButton(fit,L.T("Cadrer le plan"),FitGlyph,L.T("Ajustez la vue pour afficher tout le plan.")); DockPanel.SetDock(fit, Dock.Right); toolbar.Children.Add(fit);
+        save.Background = ToolbarSurface("#263241");
+        fit.Background = ToolbarSurface("#263241");
+        var body = new Grid();
+        body.ColumnDefinitions.Add(new ColumnDefinition { MinWidth = 420 });
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+        var inspectorColumn = new ColumnDefinition { Width = new GridLength(inspectorWidth), MinWidth = 264, MaxWidth = 540 };
+        body.ColumnDefinitions.Add(inspectorColumn);
+        Grid.SetRow(body, 2);
+        root.Children.Add(body);
+        body.Children.Add(Canvas);
+        var splitter = new GridSplitter
+        {
+            Width = 8, HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch, ResizeDirection = GridResizeDirection.Columns,
+            ResizeBehavior = GridResizeBehavior.PreviousAndNext, Background = B("#141B25")
+        };
+        System.Windows.Automation.AutomationProperties.SetName(splitter, L.T("Largeur du panneau droit"));
+        splitter.DragCompleted += (_,_) => inspectorWidth = inspectorColumn.Width.Value;
+        splitter.KeyUp += (_,_) => inspectorWidth = inspectorColumn.Width.Value;
+        Grid.SetColumn(splitter, 1);
+        body.Children.Add(splitter);
+        var sidebar = new Border { Background = B(IsBordeaux ? "#302632" : "#1D2A39"), BorderBrush = B("#303B49"), BorderThickness = new Thickness(1, 0, 0, 0) };
+        Grid.SetColumn(sidebar, 2);
+        body.Children.Add(sidebar);
+        var sideLayout = new DockPanel();
+        sidebar.Child = Shortcuts.AnimatedMenus
+            ? new Grid { Children = { new MenuDecoration(MenuSurface.Inspector, IsBordeaux), sideLayout } }
+            : sideLayout;
         DockPanel.SetDock(levelsPanel, Dock.Top); sideLayout.Children.Add(levelsPanel);
         sideLayout.Children.Add(new ScrollViewer { Content = inspector, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
-        inspector.Margin = new Thickness(20, 16, 20, 16);
+        inspector.Margin = new Thickness(12, 9, 12, 12);
         var status = new DockPanel { Margin = new Thickness(14, 0, 14, 0) };
         statusLeft.FontSize = statusRight.FontSize = 11; statusLeft.Foreground = statusRight.Foreground = B("#9BA9BA"); statusLeft.VerticalAlignment = statusRight.VerticalAlignment = VerticalAlignment.Center;
         statusRight.HorizontalAlignment = HorizontalAlignment.Right; DockPanel.SetDock(statusRight, Dock.Right); status.Children.Add(statusRight); status.Children.Add(statusLeft); Grid.SetRow(status, 3); root.Children.Add(status);
+
     }
     internal void ChangeLanguage(string language)
     {
-        Canvas.CancelGesture(); L.SetLanguage(language);
+        Canvas.CancelGesture(); L.SetLanguage(language); SetTheme(); Background=B("#141B25"); Foreground=B("#DCE4ED");
         Language = System.Windows.Markup.XmlLanguage.GetLanguage(L.Culture.Name);
         BuildInterface();
         updating = true; gridChoice.SelectedIndex = Array.IndexOf(steps, Document.Grid); updating = false;
@@ -112,38 +157,107 @@ public partial class MainWindow : Window
  <Style TargetType="ScrollBar"><Setter Property="Background" Value="#1B2430"/><Setter Property="Width" Value="8"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar"><Grid Background="{TemplateBinding Background}"><Track x:Name="PART_Track" IsDirectionReversed="True"><Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" Focusable="False"/></Track.DecreaseRepeatButton><Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#445368" CornerRadius="3" Margin="2"/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" Focusable="False"/></Track.IncreaseRepeatButton></Track></Grid></ControlTemplate></Setter.Value></Setter></Style>
 </ResourceDictionary>
 """;
-        Resources = (ResourceDictionary)XamlReader.Parse(xaml);
-        Resources[SystemColors.MenuBrushKey] = Brushes.White; Resources[SystemColors.MenuTextBrushKey] = Brushes.Black;
+        Resources = (ResourceDictionary)XamlReader.Parse(ThemeMarkup(xaml));
+        if (IsBordeaux)
+        {
+            var menus = new ResourceDictionary { Source=new Uri("/Coat;component/BordeauxMenu.xaml",UriKind.Relative) };
+            Resources[typeof(MenuItem)] = menus[typeof(MenuItem)];
+        }
+        Resources[SystemColors.MenuBrushKey] = MenuBack; Resources[SystemColors.ControlBrushKey] = MenuBack; Resources[SystemColors.MenuTextBrushKey] = MenuInk;
     }
-    private static ImageSource MakeIcon()
+    private static readonly ImageSource OfficialLogo = LoadOfficialLogo();
+    private static readonly ImageSource HeaderLogo = LoadHeaderLogo();
+    private static BitmapImage LoadOfficialLogo(int width = 128)
     {
-        var visual = new DrawingVisual(); using (var dc = visual.RenderOpen()) { dc.DrawRoundedRectangle(B("#78DCC1"), null, new Rect(0, 0, 32, 32), 7, 7); var pen = new Pen(B("#15281F"), 4); dc.DrawLine(pen, new Point(23, 9), new Point(10, 9)); dc.DrawLine(pen, new Point(10, 9), new Point(10, 23)); dc.DrawLine(pen, new Point(10, 23), new Point(23, 23)); } var bmp = new RenderTargetBitmap(32, 32, 96, 96, PixelFormats.Pbgra32); bmp.Render(visual); return bmp;
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.UriSource = new Uri("pack://application:,,,/Coat;component/Assets/CoatLogo.png", UriKind.Absolute);
+        image.DecodePixelWidth = width;
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        image.EndInit();
+        image.Freeze();
+        return image;
     }
-    private MenuItem Menu(string title) => new() { Header = title, Background = Brushes.White, Foreground = Brushes.Black };
+    private static BitmapSource LoadHeaderLogo()
+    {
+        // Composite the official artwork onto either header theme, without its black matte.
+        var source = new FormatConvertedBitmap(LoadOfficialLogo(256), PixelFormats.Bgra32, null, 0);
+        int width = source.PixelWidth, height = source.PixelHeight, stride = width * 4;
+        var pixels = new byte[stride * height];
+        source.CopyPixels(pixels, stride, 0);
+        int left = width, top = height, right = -1, bottom = -1;
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            int index = y * stride + x * 4;
+            int brightness = Math.Max(pixels[index], Math.Max(pixels[index+1], pixels[index+2]));
+            pixels[index+3] = (byte)(pixels[index+3] * Math.Clamp((brightness - 12) / 64.0, 0, 1));
+            if (pixels[index+3] == 0) continue;
+            left = Math.Min(left, x);
+            top = Math.Min(top, y);
+            right = Math.Max(right, x);
+            bottom = Math.Max(bottom, y);
+        }
+        var transparent = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+        if (right < left) return OfficialLogo as BitmapSource ?? source;
+        var cropped = new CroppedBitmap(transparent, new Int32Rect(left, top, right-left+1, bottom-top+1));
+        cropped.Freeze();
+        return cropped;
+    }
+    private MenuItem Menu(string title) => new() { Header = title, Background = MenuBack, Foreground = MenuInk };
+    private static MenuItem DropDownItem(string title) => new() { Header = title, Background = Brushes.White, Foreground = Brushes.Black };
     private void Add(MenuItem parent, string title, string shortcut, Action action)
-    { RegisterFeature(title, action, menu: true); var item = new MenuItem { Header = title, InputGestureText = shortcut }; var feature = ShortcutSettings.FeatureLabels.FirstOrDefault(label => L.T(label) == title); if (feature != null) featureMenus[item] = feature; item.Click += (_, _) => action(); parent.Items.Add(item); var original = ParseHint(shortcut); if (original != null) { shortcutMenus.Add((item, original)); item.InputGestureText = CurrentHint(original); } }
-    private Button Button(string text, Action action)
-    { RegisterFeature(text, action); var b = new Button { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch }; b.Click += (_, _) => action(); return b; }
-    private void AddTool(DockPanel bar, EditorTool tool, string icon, string title, string key)
+    { var feature = RegisterFeature(title, action, menu: true); var item = DropDownItem(title); item.InputGestureText = shortcut; if (feature != null) featureMenus[item] = feature; item.Click += (_, _) => action(); parent.Items.Add(item); var original = ParseHint(shortcut); if (original != null) { shortcutMenus.Add((item, original)); item.InputGestureText = CurrentHint(original); } }
+    private Button Button(string text, Action action, string? shortcutId = null)
     {
-        var content = new StackPanel { Orientation = Orientation.Horizontal }; content.Children.Add(new TextBlock { Text = icon, FontSize = 18, Margin = new Thickness(0, -2, 5, 0) }); content.Children.Add(new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center });
-        var button = Button("", () => SetTool(Canvas.Tool == tool ? EditorTool.None : tool)); button.Content = content; button.Margin = new Thickness(0, 0, 5, 0); button.Padding = new Thickness(8, 7, 8, 7); button.ToolTip = key.Length == 0 ? title : title + " · " + CurrentHint(ParseHint(key)!); System.Windows.Automation.AutomationProperties.SetName(button, title); toolButtons[tool] = button; bar.Children.Add(button);
+        var featureId = RegisterFeature(text, action);
+        var button = new Button { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch };
+        button.Click += (_, _) => action();
+        hints.Bind(button, shortcutId ?? featureId);
+        ApplyCommandIcon(button, text);
+        return button;
+    }
+    private void AddTool(DockPanel bar, EditorTool tool, string title)
+    {
+        string shortcutId = tool switch
+        {
+            EditorTool.Select => "Sélection",
+            EditorTool.Draw => "Dessin",
+            EditorTool.Erase => "Gomme",
+            EditorTool.Paint => "Coloriage",
+            EditorTool.Shapes => "Shapes",
+            EditorTool.Annotation => "Annotations",
+            EditorTool.Dimension => "Cote",
+            EditorTool.Token => "Jeton",
+            _ => throw new ArgumentOutOfRangeException(nameof(tool))
+        };
+        var button = Button("", () => SetTool(Canvas.Tool == tool ? EditorTool.None : tool), shortcutId);
+        var (path, description) = ToolDesign(tool);
+        IconButton(button, title, path, L.T(description));
+        toolButtons[tool] = button;
+        bar.Children.Add(button);
     }
     public void SetTool(EditorTool tool) { Canvas.SetTool(tool); UpdateToolButtons(); UpdateStatus(); Canvas.Focus(); }
     private void UpdateToolButtons()
     {
-        foreach (var pair in toolButtons)
-        { bool active = pair.Key == Canvas.Tool; pair.Value.Background = B(active ? "#304E48" : "#263241"); pair.Value.BorderBrush = B(active ? "#78DCC1" : "#364455"); pair.Value.Foreground = B(active ? "#9BEBD4" : "#D9E3EC"); }
+        foreach (var (tool,button) in toolButtons)
+        {
+            bool active = tool == Canvas.Tool;
+            SetActive(button, active);
+            button.Background = ToolbarSurface(active ? "#304E48" : "#263241");
+        }
     }
+    private Brush ToolbarSurface(string color) => Shortcuts.AnimatedMenus
+        ? EditorCanvas.Brush("#DF" + ChromeColor(color)[1..]) : B(color);
     private void Heading(string title)
-    { inspector.Children.Add(new TextBlock { Text = title, FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = B("#8596AB"), Margin = new Thickness(0, 0, 0, 12) }); }
+    { inspector.Children.Add(new TextBlock { Text = title, FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = B("#8596AB"), Margin = new Thickness(0, 0, 0, 6) }); }
     private void Description(string text)
-    { inspector.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = B("#96A7BC"), LineHeight = 19, Margin = new Thickness(0, 0, 0, 12) }); }
+    { inspector.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = B("#96A7BC"), LineHeight = 19, Margin = new Thickness(0, 0, 0, 6) }); }
     private readonly List<string> inspectorHints = new();
     private Button? inspectorHelp;
     private void InspectorTitle(string title)
     {
-        var row = new DockPanel { Margin = new Thickness(0, 0, 0, 14) };
+        var row = new DockPanel { Margin = new Thickness(0, 0, 0, 7) };
         inspectorHelp = Button("?", () => AppDialog.Show(this, string.Join("\n\n", inspectorHints), title, MessageBoxButton.OK, MessageBoxImage.Information));
         inspectorHelp.Width = 24; inspectorHelp.Height = 24; inspectorHelp.Padding = new Thickness(0); inspectorHelp.Visibility = Visibility.Collapsed;
         System.Windows.Automation.AutomationProperties.SetName(inspectorHelp, L.T("Aide"));
@@ -158,28 +272,43 @@ public partial class MainWindow : Window
         inspectorHelp.Visibility = Visibility.Visible;
         inspectorHelp.ToolTip = new TextBlock { Text = string.Join("\n\n", inspectorHints), TextWrapping = TextWrapping.Wrap, MaxWidth = 340 };
     }
-    private void Divider() { inspector.Children.Add(new Border { Height = 1, Background = B("#303D4C"), Margin = new Thickness(0, 18, 0, 20) }); }
+    private void Divider() { inspector.Children.Add(new Border { Height = 1, Background = B("#303D4C"), Margin = new Thickness(0, 7, 0, 8) }); }
     private TextBox Field(string title, string value, bool numeric = true)
     {
         var row = new Grid { Margin = new Thickness(0, 0, 0, 8) }; row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(82) }); row.ColumnDefinitions.Add(new ColumnDefinition());
         row.Children.Add(new TextBlock { Text = title, Foreground = B("#A7B6C9"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
         var input = new TextBox { Text = value, MinWidth = 60 }; System.Windows.Automation.AutomationProperties.SetName(input, title); Grid.SetColumn(input, 1); row.Children.Add(input); inspector.Children.Add(row); if (numeric) NumericInput(input); return input;
     }
-    private void ModeButtons(string[] labels, int active, Action<int> choose)
+    private void ModeButtons(string[] labels, int active, Action<int> choose, string[]? shortcutIds = null)
     {
-        var grid = new System.Windows.Controls.Primitives.UniformGrid { Rows = 1, Margin = new Thickness(0, 0, 0, 12) };
-        for (int i = 0; i < labels.Length; i++) { int index = i; var b = Button(labels[i], () => choose(index)); b.FontSize = 11; b.Padding = new Thickness(4, 8, 4, 8); b.Margin = new Thickness(0, 0, i == labels.Length - 1 ? 0 : 4, 0); if (labels.SequenceEqual(new[] { L.T("Uni"), L.T("Bandes"), L.Dots })) { b.Content = PatternIcon(i); b.ToolTip = labels[i]; System.Windows.Automation.AutomationProperties.SetName(b, labels[i]); } if (active == i) { b.Background = B("#304E48"); b.BorderBrush = B("#6DC8B0"); b.Foreground = B("#9BEBD4"); } grid.Children.Add(b); } inspector.Children.Add(grid);
+        var row = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
+        bool patterns = labels.SequenceEqual(new[] { L.T("Uni"), L.T("Bandes"), L.Dots });
+        for (int i = 0; i < labels.Length; i++)
+        {
+            int index = i;
+            var button = Button(labels[i], () => choose(index), shortcutIds?[i]);
+            if (patterns)
+            {
+                button.Content = PatternIcon(i);
+                CompactButton(button, labels[i]);
+                SetHint(button, labels[i], L.T("Appliquez ce motif aux remplissages."));
+            }
+            SetActive(button, active == i);
+            row.Children.Add(button);
+        }
+        inspector.Children.Add(row);
     }
     public void UpdateInspector()
     {
         CloseColorPicker(false); confirmations.Clear(); inspectorCommands.Clear(); UpdateLevels(); inspector.Children.Clear(); inspectorHints.Clear(); inspectorHelp = null;
         if (Canvas.Tool != EditorTool.None)
         {
-        string[] names = { L.T("Sélection"), L.T("Dessin de contours"), L.T("Gomme"), L.T("Coloriage"), "", L.T("Shapes"), L.T("Annotations"), L.T("Cote"), L.T("Jetons") };
+        string[] names = { L.T("Sélection"), L.T("Dessin de contours"), L.T("Gomme"), L.T("Coloriage"), "", L.T("Shapes"), L.T("Annotations"), L.T("Cotation"), L.T("Jetons") };
         InspectorTitle(names[(int)Canvas.Tool]);
         if (Canvas.Tool == EditorTool.Select)
         {
-            ModeButtons(new[] { L.T("•  Points"), L.T("╱  Arêtes"), L.T("▱  Zones") }, (int)Canvas.Mode, i => { Canvas.CancelGesture(); Canvas.ClearSelection(); Canvas.Mode = (SelectionMode)i; UpdateInspector(); Canvas.InvalidateVisual(); Canvas.Focus(); });
+            ModeButtons(new[] { L.T("•  Points"), L.T("╱  Arêtes"), L.T("▱  Zones") }, (int)Canvas.Mode, i => { Canvas.CancelGesture(); Canvas.ClearSelection(); Canvas.Mode = (SelectionMode)i; UpdateInspector(); Canvas.InvalidateVisual(); Canvas.Focus(); },
+                new[] { "Sélection de points", "Sélection d’arêtes", "Sélection de zones" });
             var across = new CheckBox { Content = L.T("Sélection sur plusieurs niveaux"), IsChecked = Canvas.SelectAcrossLevels }; across.Click += (_, _) => { Canvas.SelectAcrossLevels = across.IsChecked == true; Canvas.ClearSelection(); Canvas.InvalidateVisual(); }; inspector.Children.Add(across);
             var dimensionEdges = Canvas.SelectionEdges();
             var dimensions = Document.Edges.Where(e => dimensionEdges.Contains(e.Id) && e.Dimension).ToList();
@@ -206,24 +335,26 @@ public partial class MainWindow : Window
             }
             else if (Canvas.SelectedAnnotations.Count == 0) Description(L.T("Aucune sélection"));
             if (Canvas.SelectedAnnotations.Count > 0 && Canvas.SelectedAnnotation == null) Description(L.F($"{Canvas.SelectedAnnotations.Count} textes et jetons sélectionnés"));
-            Divider(); Heading(L.T("GROUPES"));
-            var ignoreGroups = Button(L.T("Ignorer les groupes"), Canvas.ToggleIgnoreGroups);
-            ignoreGroups.ToolTip = L.T("Sélectionnez les points, arêtes et zones séparément sans dissocier les groupes. Recliquez pour réactiver la sélection des groupes.");
-            System.Windows.Automation.AutomationProperties.SetName(ignoreGroups,L.T("Ignorer les groupes"));
-            System.Windows.Automation.AutomationProperties.SetItemStatus(ignoreGroups,L.T(Canvas.GroupsIgnored ? "Activé" : "Désactivé"));
-            if(Canvas.GroupsIgnored){ignoreGroups.Background=B("#304E48");ignoreGroups.BorderBrush=B("#78DCC1");ignoreGroups.Foreground=B("#9BEBD4");}
-            ignoreGroups.Margin = new Thickness(0,0,0,10); inspector.Children.Add(ignoreGroups);
-            if (ids.Count > 0)
+            FoldSection("groups", L.T("GROUPES"), () =>
             {
-                var groups = Document.MatchingGroups(Canvas.SelectedVertices, Canvas.SelectionEdges());
-                if (groups.Count > 0) Description(string.Join(" · ", groups.Select(g => g.Name)));
-                else ToolHint(L.T("Sélectionnez plusieurs éléments puis regroupez-les pour les manipuler ensemble."));
-                if (groups.Count == 1) GroupNameControls(groups[0]);
-                var actions = new System.Windows.Controls.Primitives.UniformGrid { Rows = 1 };
-                actions.Children.Add(Button(L.T("Grouper"), GroupSelection));
-                if (groups.Count > 0) { var ungroup = Button(L.T("Dissocier"), UngroupSelection); ungroup.Margin = new Thickness(6, 0, 0, 0); actions.Children.Add(ungroup); }
-                inspector.Children.Add(actions);
-            }
+                var ignoreGroups = Button(L.T("Ignorer les groupes"), Canvas.ToggleIgnoreGroups);
+                ignoreGroups.ToolTip = L.T("Sélectionnez les points, arêtes et zones séparément sans dissocier les groupes. Recliquez pour réactiver la sélection des groupes.");
+                System.Windows.Automation.AutomationProperties.SetName(ignoreGroups,L.T("Ignorer les groupes"));
+                System.Windows.Automation.AutomationProperties.SetItemStatus(ignoreGroups,L.T(Canvas.GroupsIgnored ? "Activé" : "Désactivé"));
+                SetActive(ignoreGroups, Canvas.GroupsIgnored);
+                ignoreGroups.Margin = new Thickness(0,0,0,10); inspector.Children.Add(ignoreGroups);
+                if (ids.Count > 0)
+                {
+                    var groups = Document.MatchingGroups(Canvas.SelectedVertices, Canvas.SelectionEdges());
+                    if (groups.Count > 0) Description(string.Join(" · ", groups.Select(g => g.Name)));
+                    else ToolHint(L.T("Sélectionnez plusieurs éléments puis regroupez-les pour les manipuler ensemble."));
+                    if (groups.Count == 1) GroupNameControls(groups[0]);
+                    var actions = new WrapPanel();
+                    actions.Children.Add(Button(L.T("Grouper"), GroupSelection, "Grouper"));
+                    if (groups.Count > 0) { var ungroup = Button(L.T("Dissocier"), UngroupSelection, "Dissocier"); ungroup.Margin = new Thickness(6, 0, 0, 0); actions.Children.Add(ungroup); }
+                    inspector.Children.Add(actions);
+                }
+            }, initiallyOpen: true);
         }
         else if (Canvas.Tool == EditorTool.Dimension) DimensionInspector();
         else if (Canvas.Tool is EditorTool.Annotation or EditorTool.Token) AnnotationInspector();
@@ -255,7 +386,7 @@ public partial class MainWindow : Window
             ModeButtons(new[] { L.T("Remplir une zone"), L.T("Colorer les lignes") }, Canvas.PaintLines ? 1 : 0, i => { Canvas.PaintLines = i == 1; UpdateInspector(); });
             ToolHint(Canvas.PaintLines ? L.T("Cliquez sur une arête pour lui appliquer la couleur.") : L.T("Cliquez dans un contour fermé pour remplir la zone."));
             PaintStyleInspector();
-            var palette = new PaletteView(SavedColors, color => { Canvas.PaintColor = color; UpdateInspector(); }, () => Canvas.PaintColor, Notify) { Margin = new Thickness(0, 1, 0, 12) };
+            var palette = new PaletteView(SavedColors, color => { Canvas.PaintColor = color; UpdateInspector(); }, () => Canvas.PaintColor, Notify, this,hints) { Margin = new Thickness(0, 1, 0, 12) };
             inspector.Children.Add(palette);
             var wheel = ColorButton(() => Canvas.PaintColor, color => { Canvas.PaintColor = color; palette.Refresh(); });
             wheel.Margin = new Thickness(0, 0, 0, 10); inspector.Children.Add(wheel);
@@ -263,7 +394,7 @@ public partial class MainWindow : Window
             {
                 var apply = Button(L.T("Colorer la sélection"), () => Mutate(() => { if (Canvas.PaintLines) foreach (var e in Document.Edges.Where(e => Canvas.SelectedEdges.Contains(e.Id))) { e.Color = Canvas.PaintColor; e.Style = Canvas.PaintLineStyle; } else foreach (var f in Canvas.SelectedFaces) { Canvas.PaintFace(f); } })); apply.Margin = new Thickness(0, 8, 0, 0); inspector.Children.Add(apply);
             }
-            WallColorControls();
+            FoldSection("map", L.T("EXPORT .MAP"), WallColorControls);
         }
         UpdateTitle(); return;
         }
@@ -278,7 +409,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            ToolHint(L.T("Superposez votre plan à une esquisse, une carte ou une capture de niveau.")); inspector.Children.Add(Button(L.T("＋  Importer une image"), ImportImage)); ToolHint(L.T("\nPNG, JPG, BMP · image intégrée au projet"));
+            ToolHint(L.T("Superposez votre plan à une esquisse, une carte ou une capture de niveau.")); inspector.Children.Add(Button(L.T("＋  Importer une image"), ImportImage, "Importer une image")); ToolHint(L.T("\nPNG, JPG, BMP · image intégrée au projet"));
         }
         ToolHint(L.T("Molette   Zoom\nClic milieu / droit   Déplacer la vue\nEspace + glisser   Déplacer la vue\nFlèches   Déplacer la vue\n1–0   Changer le pas de grille\nA   Cadrer le plan\nCtrl+S   Enregistrer   ·   Ctrl+Z   Annuler"));
         UpdateTitle();
@@ -287,17 +418,17 @@ public partial class MainWindow : Window
     {
         levelsPanel.Children.Clear();
         levelsPanel.Children.Add(new TextBlock { Text = L.T("NIVEAUX"), FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = B("#8596AB"), Margin = new Thickness(0, 0, 0, 10) });
-        levelsPanel.Children.Add(new LevelPreview(Document.Levels, Document.ActiveLevel) { Height = compactLevels || Canvas.Tool == EditorTool.Select ? 96 : 132 });
+        levelsPanel.Children.Add(new LevelPreview(Document.Levels, Document.ActiveLevel) { Height = compactLevels || Canvas.Tool == EditorTool.Select ? 78 : 102 });
         var row = new Grid { Margin = new Thickness(0, 10, 0, 0) };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
-        var down = Button("↓", () => ChangeAdjacentLevel(-1)); down.Padding = new Thickness(0); down.IsEnabled = Document.ActiveLevel > -999; down.ToolTip = L.T("Passer au niveau inférieur (créé si nécessaire) · Page ↓"); row.Children.Add(down);
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) }); row.ColumnDefinitions.Add(new ColumnDefinition()); for (int i=0; i<3; i++) row.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(32)});
+        var down = Button(L.T("Un niveau plus bas"), () => ChangeAdjacentLevel(-1), "Niveau inférieur"); down.Margin = new Thickness(0); down.IsEnabled = Document.ActiveLevel > -999; down.ToolTip = L.T("Passer au niveau inférieur (créé si nécessaire) · Page ↓"); SetHint(down,L.T("Un niveau plus bas"),L.T("Passer au niveau inférieur (créé si nécessaire) · Page ↓").Split('·')[0].Trim()); row.Children.Add(down);
         var choice = new ComboBox { Margin = new Thickness(6, 0, 6, 0), Height = 32, SelectedValuePath = "Tag" };
         foreach (int level in Document.Levels) choice.Items.Add(new ComboBoxItem { Content = L.T("Niveau ") + level, Tag = level });
         choice.SelectedValue = Document.ActiveLevel; choice.SelectionChanged += (_, _) => { if (choice.SelectedValue is int level && level != Document.ActiveLevel) ChangeLevel(level); }; Grid.SetColumn(choice, 1); row.Children.Add(choice);
-        var up = Button("↑", () => ChangeAdjacentLevel(1)); up.Padding = new Thickness(0); up.IsEnabled = Document.ActiveLevel < 999; up.ToolTip = L.T("Passer au niveau supérieur (créé si nécessaire) · Page ↑"); Grid.SetColumn(up, 2); row.Children.Add(up); levelsPanel.Children.Add(row);
-        var delete = Button(L.T("Supprimer ce niveau"), DeleteActiveLevel); delete.FontSize = 11; delete.Padding = new Thickness(5); delete.Margin = new Thickness(0, 7, 0, 0); delete.Foreground = B("#E3A0A9"); levelsPanel.Children.Add(delete);
+        var up = Button(L.T("Un niveau plus haut"), () => ChangeAdjacentLevel(1), "Niveau supérieur"); up.Margin = new Thickness(0); up.IsEnabled = Document.ActiveLevel < 999; up.ToolTip = L.T("Passer au niveau supérieur (créé si nécessaire) · Page ↑"); SetHint(up,L.T("Un niveau plus haut"),L.T("Passer au niveau supérieur (créé si nécessaire) · Page ↑").Split('·')[0].Trim()); Grid.SetColumn(up, 2); row.Children.Add(up); levelsPanel.Children.Add(row);
+        var delete = Button(L.T("Supprimer ce niveau"), DeleteActiveLevel); delete.Margin = new Thickness(0); delete.Foreground = B("#E3A0A9"); Grid.SetColumn(delete,4); row.Children.Add(delete);
         LevelHeightControls();
-        var organize = Button(L.T("Organisation"), ShowOrganization); organize.Margin = new Thickness(0, 6, 0, 0); organize.FontSize = 11; organize.Padding = new Thickness(5); levelsPanel.Children.Add(organize);
+        var organize = Button(L.T("Organisation"), ShowOrganization); organize.Margin = new Thickness(0); Grid.SetColumn(organize,3); row.Children.Add(organize);
         if (Canvas.SelectionPoints().Count > 0 || Canvas.SelectedAnnotations.Count > 0)
         {
             levelsPanel.Children.Add(new TextBlock { Text = L.T("AFFECTER LA SÉLECTION AU NIVEAU"), FontSize = 9, Foreground = B("#A9B9CC"), Margin = new Thickness(0, 14, 0, 7) });
@@ -311,7 +442,7 @@ public partial class MainWindow : Window
             }, input); apply.Margin = new Thickness(7, 0, 0, 0); DockPanel.SetDock(apply, Dock.Right); assign.Children.Add(apply); assign.Children.Add(input); levelsPanel.Children.Add(assign);
             if (Canvas.SelectedVertices.Count > 0) apply.ToolTip = L.T("Les points emportent leurs arêtes incidentes.");
         }
-        levelsPanel.Children.Add(new Border { Height = 1, Background = B("#303D4C"), Margin = new Thickness(0, 16, 0, 0) });
+        levelsPanel.Children.Add(new Border { Height = 1, Background = B("#303D4C"), Margin = new Thickness(0, 7, 0, 0) });
     }
     public void ChangeLevel(int level)
     {
@@ -421,6 +552,17 @@ public partial class MainWindow : Window
         if (Canvas.IsColorSampling && key == Key.Escape) { Canvas.CancelColorSampling(); e.Handled=true; return; }
         if (e.OriginalSource is TextBox && key != Key.Escape) return;
         var modifiers = Keyboard.Modifiers;
+        if (modifiers == ModifierKeys.None && key is (Key.S or Key.R or Key.T) && HasTransformSelection)
+        {
+            var (_, transform) = selectionShortcuts.Values.First(value => value.Key == key);
+            if (!e.IsRepeat)
+            {
+                if (Canvas.Tool != EditorTool.Select) SetTool(EditorTool.Select);
+                Canvas.SetTransform(transform);
+            }
+            e.Handled = true;
+            return;
+        }
         var binding = new Shortcut(key, modifiers);
         var command = ShortcutSettings.Actions.FirstOrDefault(a => Shortcuts.Bindings.GetValueOrDefault(a.Label) == binding);
         if (command != null && (command.Command.Key == Key.None || command.Label == "Confirmer")) { if (!e.IsRepeat) ExecuteFeature(command.Label); e.Handled = true; return; }

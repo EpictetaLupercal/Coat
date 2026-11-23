@@ -51,7 +51,7 @@ internal static class Update04Tests
         window.UpdateLayout();
         var dots = Desc<Button>(window).First(b => (b.Content as string) == "Points" || System.Windows.Automation.AutomationProperties.GetName(b) == "Points"); dots.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         check(p.FillPatterns[p.Faces()[0].Key] == FillPattern.Dots, "Selection inspector applies the dots motif via its button");
-        var shortDash = Desc<Button>(window).First(b => (b.Content as string) == "Court"); shortDash.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var shortDash = Desc<Button>(window).First(b => System.Windows.Automation.AutomationProperties.GetName(b) == "Court"); shortDash.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         check(p.FaceEdges(p.Faces()[0]).All(e => p.Edges.First(x => x.Id == e).Style == LineStyle.ShortDash), "Selection inspector applies short dashes to selected zone edges");
         canvas.ClearSelection(); window.SetTool(EditorTool.None); canvas.Fit(); window.UpdateLayout(); Pump();
         MainWindow.SaveVisual((FrameworkElement)window.Content, Path.Combine(output, "coat-04-styles.png"));
@@ -67,7 +67,7 @@ internal static class Update04Tests
         if (popup != null) MainWindow.SaveVisual(popup, Path.Combine(output, "coat-04-menu.png")); file.IsSubmenuOpen = false;
         window.SetTool(EditorTool.Annotation); canvas.SelectedAnnotation = p.Annotations.First().Id; window.UpdateInspector(); window.UpdateLayout();
         var editor = Desc<TextBox>(window).Single(t => t.AcceptsReturn); editor.Text = "Entrée principale\nAccès réservé";
-        Desc<Button>(window).Single(b => b.Content as string == "Appliquer le texte").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Desc<Button>(window).Single(b => (b.Content as string == "Appliquer le texte" || System.Windows.Automation.AutomationProperties.GetName(b) == "Appliquer le texte")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         check(p.Annotations.First().Text == editor.Text, "Annotation editor applies multiline content through its button");
         window.Undo(); check(window.Document.Annotations.First().Text == "Entrée <A> & sortie\nNiveau 0", "Annotation text edits can be undone");
     }

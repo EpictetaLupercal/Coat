@@ -16,6 +16,7 @@ internal static class AppDialog
             ResizeMode = ResizeMode.NoResize, Background = Brushes.White, Foreground = Brushes.Black, FontFamily = new FontFamily("Segoe UI"), FontSize = 13,
             ShowInTaskbar = false, WindowStartupLocation = owner?.IsVisible == true ? WindowStartupLocation.CenterOwner : WindowStartupLocation.CenterScreen
         };
+        if(owner is MainWindow { IsBordeaux: true } host) { dialog.Resources = host.Resources; dialog.Background = host.MenuBack; dialog.Foreground = host.MenuInk; }
         if (owner?.IsVisible == true) dialog.Owner = owner;
         var root = new DockPanel { Margin = new Thickness(20) }; dialog.Content = root;
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };

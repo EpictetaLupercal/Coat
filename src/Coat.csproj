@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -7,7 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Coat</AssemblyName>
     <RootNamespace>Coat</RootNamespace>
-    <Version>1.2</Version>
+    <Version>1.3.8</Version>
+    <ApplicationIcon>Assets\Coat.ico</ApplicationIcon>
     <Authors>Epicteta Lupercal</Authors>
     <Company>Epicteta Lupercal</Company>
     <Copyright>Epicteta Lupercal</Copyright>
@@ -17,4 +18,6 @@
     <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
   <ItemGroup><EmbeddedResource Include="Locales/en.json" /></ItemGroup>
+  <ItemGroup><PackageReference Include="MoonSharp" Version="2.0.0" /></ItemGroup>
+  <ItemGroup><Resource Include="..\docs\images\coat-logo.png" Link="Assets\CoatLogo.png" /></ItemGroup>
 </Project>

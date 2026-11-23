@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -8,9 +8,8 @@ public partial class EditorCanvas
     private bool CanSelectAnnotation(Annotation note) => note.Level <= Plan.ActiveLevel && CanSelectLevel(note.Level);
     internal Rect AnnotationScreenBounds(Annotation note)
     {
-        var point=Screen(new V2(note.X,note.Y));
-        if(note.IsToken)return new Rect(point.X-note.Size*Zoom/2,point.Y-note.Size*Zoom/2,note.Size*Zoom,note.Size*Zoom);
-        var text=note.Layout();return new Rect(point.X,point.Y,Math.Max(text.Width,1)*Zoom,text.Height*Zoom);
+        var bounds = note.WorldBounds();
+        return new Rect(Screen(new V2(bounds.Left, -bounds.Top)), new Size(bounds.Width*Zoom, bounds.Height*Zoom));
     }
 }
 public partial class MainWindow

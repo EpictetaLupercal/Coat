@@ -79,12 +79,13 @@ internal static class Update12Tests
         result = MapExporter.Export(example); CheckPlanes(result.Text, check);
         File.WriteAllText(Path.Combine(output,"coat-12-walls.map"),result.Text); File.WriteAllText(Path.Combine(output,"Example-Map.coat"),example.Serialize());
         window.LoadDocument(Rectangle(), ""); window.SetTool(EditorTool.Paint); window.UpdateLayout(); Pump();
+        Desc<Expander>(window).Single(e=>e.Header as string=="MAP EXPORT").IsExpanded=true; window.UpdateLayout();
         var zbox = Desc<TextBox>(window).Single(t => AutomationProperties.GetName(t) == "Height"); zbox.Text = "-96";
-        Desc<Button>(window).Single(b => b.Content as string == "Apply").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Desc<Button>(window).Single(b => (b.Content as string == "Apply" || System.Windows.Automation.AutomationProperties.GetName(b) == "Apply")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         check(window.Document.LevelZ(0) == -96, "Level panel Apply Z changes the current level elevation");
         window.Undo(); check(window.Document.LevelZ(0) == 0, "Elevation change supports Undo"); window.Redo(); check(window.Document.LevelZ(0) == -96, "Elevation change supports Redo");
         window.Canvas.PaintColor = "#224466"; window.UpdateInspector(); window.UpdateLayout(); Pump();
-        Desc<Button>(window).Single(b => b.Content as string == "Use Current Color for Walls").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Desc<Button>(window).Single(b => (b.Content as string == "Use Current Color for Walls" || System.Windows.Automation.AutomationProperties.GetName(b) == "Use Current Color for Walls")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         check(window.Document.WallColor == "#224466", "Color panel assigns the current paint color to exported walls"); window.Undo(); check(window.Document.WallColor == "#FFFFFF", "Changing the wall color supports Undo");
         window.SetLevelHeight(48); window.DeleteActiveLevel(); check(window.Document.LevelHeights.Count == 0 && window.Document.LevelZ(0) == 0, "Deleting a level removes its elevation and recreates the default level when needed"); window.Undo(); check(window.Document.LevelZ(0) == 48, "Undo restores a deleted level's elevation");
         window.SetLevelHeight(double.NaN); check(window.Document.LevelZ(0) == 48, "Nonfinite elevation input does not change the document");
@@ -94,7 +95,8 @@ internal static class Update12Tests
         check(Desc<Menu>(window).Single().Items.OfType<MenuItem>().SelectMany(m => m.Items.OfType<MenuItem>()).Any(m => m.Header as string == "Export to .map…"), "File menu exposes the localized map export command");
         window.LoadDocument(example, ""); window.Canvas.Fit(); window.SetTool(EditorTool.Paint); window.Width = 1440; window.Height = 900; window.UpdateLayout(); Pump();
         MainWindow.SaveVisual((FrameworkElement)window.Content,Path.Combine(output,"coat-12-map-settings.png"));
-        var sidebar = Desc<ScrollViewer>(window).Single(v => v.Content is StackPanel panel && panel.Children.OfType<TextBlock>().Any(t => t.Text == "MAP EXPORT"));
+        var section = Desc<Expander>(window).Single(e => e.Header as string == "MAP EXPORT"); section.IsExpanded = true; window.UpdateLayout();
+        var sidebar = Desc<ScrollViewer>(window).Single(v => v.Content is StackPanel);
         sidebar.ScrollToEnd(); Pump(); MainWindow.SaveVisual((FrameworkElement)window.Content,Path.Combine(output,"coat-12-wall-color.png"));
         window.Width = 1050; window.Height = 680; window.UpdateLayout(); Pump(); MainWindow.SaveVisual((FrameworkElement)window.Content,Path.Combine(output,"coat-12-compact.png"));
         check(L.Missing.Count == 0, "Map export controls and validation messages have English translations: " + string.Join(", ",L.Missing));

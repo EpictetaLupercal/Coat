@@ -34,11 +34,11 @@ public partial class MainWindow
         recentMenu.Items.Clear();
         foreach (string path in RecentFiles)
         {
-            var item = new MenuItem { Header = path.Replace("_", "__"), ToolTip = path };
+            var item = DropDownItem(path.Replace("_", "__")); item.ToolTip = path;
             item.Click += (_, _) => OpenRecent(path); recentMenu.Items.Add(item);
         }
-        if (RecentFiles.Count == 0) recentMenu.Items.Add(new MenuItem { Header = L.T("Aucun projet récent"), IsEnabled = false });
-        else { recentMenu.Items.Add(new Separator()); var clear = new MenuItem { Header = L.T("Effacer la liste") }; clear.Click += (_, _) => ClearRecent(); recentMenu.Items.Add(clear); }
+        if (RecentFiles.Count == 0) { var empty = DropDownItem(L.T("Aucun projet récent")); empty.IsEnabled = false; recentMenu.Items.Add(empty); }
+        else { recentMenu.Items.Add(new Separator()); var clear = DropDownItem(L.T("Effacer la liste")); clear.Click += (_, _) => ClearRecent(); recentMenu.Items.Add(clear); }
     }
     internal void OpenRecent(string path)
     {

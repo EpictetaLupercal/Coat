@@ -88,7 +88,7 @@ internal static class Update03Tests
         window.Undo(); canvas.ClearSelection(); Click(new(96, -32)); check(canvas.SelectionEdges().Count == 8, "Undo restores group selection behaviour");
         window.UpdateInspector(); window.UpdateLayout(); Pump();
         TextBox MoveBox(string name) => Controls<TextBox>(window).Single(t => AutomationProperties.GetName(t) == name);
-        Button ActionButton(string name) => Controls<Button>(window).Single(b => b.Content as string == name);
+        Button ActionButton(string name) => Controls<Button>(window).Single(b => (b.Content as string == name || System.Windows.Automation.AutomationProperties.GetName(b) == name));
         MoveBox("Décalage X").Text = "64"; MoveBox("Décalage Y").Text = "-32";
         var moveStart = window.Document.Vertices.ToDictionary(v => v.Id, v => v.P);
         ActionButton("Déplacer la sélection").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); window.UpdateLayout(); Pump();

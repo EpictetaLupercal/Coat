@@ -39,7 +39,7 @@ internal static class InternationalTests
                 void EnterHeight(string value)
                 {
                     Desc<TextBox>(window).Single(t => AutomationProperties.GetName(t) == "Height").Text = value;
-                    Desc<Button>(window).Single(b => b.Content as string == "Apply").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Desc<Button>(window).Single(b => (b.Content as string == "Apply" || System.Windows.Automation.AutomationProperties.GetName(b) == "Apply")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     window.UpdateLayout(); Pump();
                 }
                 EnterHeight("24,5"); check(window.Document.LevelZ(0) == 24.5, $"Height accepts a decimal comma under {culture}");

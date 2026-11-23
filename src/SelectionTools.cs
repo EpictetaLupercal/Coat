@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -34,7 +34,7 @@ public partial class MainWindow
         for (int i = 0; i < names.Length; i++)
         {
             var drawing = new DrawingGroup(); using (var dc = drawing.Open())
-            { dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, 100, 18)); dc.DrawLine(new Pen(B("#DFE8F2"), 2) { DashStyle = i == 0 ? DashStyles.Solid : i == 1 ? new DashStyle(new double[] { 8, 4 }, 0) : new DashStyle(new double[] { 2, 3 }, 0) }, new Point(0, 9), new Point(100, 9)); }
+            { dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, 100, 18)); dc.DrawLine(new Pen(B("#DFE8F2"), 2) { DashStyle = EditorCanvas.EdgeDash((LineStyle)i) }, new Point(0, 9), new Point(100, 9)); }
             drawing.Freeze(); choice.Items.Add(new LineChoice(names[i], new DrawingImage(drawing)));
         }
         System.Windows.Automation.AutomationProperties.SetName(choice, L.T("STYLE DES LIGNES"));
@@ -127,9 +127,9 @@ public partial class EditorCanvas
             else if (Mode == SelectionMode.Face && HitFace(position) is { } face) SelectHit(null, null, face, false);
             Host.UpdateInspector(); InvalidateVisual();
         }
-        var menu = new ContextMenu { Background = Brushes.White, Foreground = Brushes.Black };
+        var menu = new ContextMenu { Resources = Host.Resources, BorderBrush = Brushes.LightGray, Background = Brushes.White, Foreground = Brushes.Black };
         void Item(string name, Action action, bool enabled)
-        { var item = new MenuItem { Header = L.T(name), Background = Brushes.White, Foreground = Brushes.Black, IsEnabled = enabled }; if (Host.Shortcuts.Bindings.TryGetValue(name, out var key) && key.Key != Key.None) item.InputGestureText = key.ToString(); item.Click += (_, _) => action(); menu.Items.Add(item); }
+        { var item = new MenuItem { Header = L.T(name), IsEnabled = enabled }; if (Host.Shortcuts.Bindings.TryGetValue(name, out var key) && key.Key != Key.None) item.InputGestureText = key.ToString(); item.Click += (_, _) => action(); menu.Items.Add(item); }
         bool selected = SelectionPoints().Count > 0 || SelectedAnnotations.Count > 0;
         Item("Dissoudre les sommets", () => DissolveSelection(true), Tool == EditorTool.Select && SelectedVertices.Count > 0 && SelectedAnnotations.Count == 0);
         Item("Dissoudre les arêtes", () => DissolveSelection(false), Tool == EditorTool.Select && SelectionEdges().Count > 0 && SelectedAnnotations.Count == 0);

@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -28,7 +28,7 @@ internal static class Update07Tests
         { canvas.PointerDown(canvas.Screen(from), MouseButton.Left, shift: shift); canvas.PointerMove(canvas.Screen(to), shift); canvas.PointerUp(MouseButton.Left); }
         void Click(V2 p) { canvas.PointerDown(canvas.Screen(p), MouseButton.Left); canvas.PointerUp(MouseButton.Left); }
         TextBox Field(string name) => Desc<TextBox>(window).Single(t => AutomationProperties.GetName(t) == name);
-        Button ActionButton(string name) => Desc<Button>(window).Single(b => b.Content as string == name);
+        Button ActionButton(string name) => Desc<Button>(window).Single(b => (b.Content as string == name || System.Windows.Automation.AutomationProperties.GetName(b) == name));
         Load(Rectangle()); canvas.SelectAll(); var before = window.Document.Serialize(); window.RotateSelection(90);
         check(Near(window.Document.Vertices.Min(v => v.X), 32) && Near(window.Document.Vertices.Max(v => v.Y), 96) && Near(window.Document.Faces().Single().Area, 8192), "Numeric rotation uses the selection center and preserves area");
         check(window.Document.Groups.Count == 1 && window.Document.Fills.Values.Single() == "#66C5AD" && window.Document.FillPatterns.Values.Single() == FillPattern.Dots && canvas.SelectionPoints().Count == 4, "Rotation retains grouping, appearance and selection");

@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -19,8 +19,8 @@ public partial class MainWindow
             var button = Button("", () => { Canvas.TokenShape = kind; if (note != null) Mutate(() => note.TokenShape = kind); else { UpdateInspector(); Canvas.InvalidateVisual(); } });
             button.Content = new Image { Source = TokenShapes.Icon(kind), Width = 24, Height = 24 };
             button.Height = 36; button.Padding = new Thickness(4); button.Margin = new Thickness(2,0,2,5);
-            button.ToolTip = TokenShapes.Name(kind); System.Windows.Automation.AutomationProperties.SetName(button,TokenShapes.Name(kind));
-            if (kind == active) { button.Background = B("#304E48"); button.BorderBrush = B("#78DCC1"); }
+            button.ToolTip = TokenShapes.Name(kind); SetHint(button,TokenShapes.Name(kind),L.T("Choisissez ce symbole pour le jeton."));
+            SetActive(button, kind == active);
             grid.Children.Add(button);
         }
         inspector.Children.Add(grid);

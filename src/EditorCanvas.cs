@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -289,14 +289,14 @@ public partial class EditorCanvas : FrameworkElement
         else if (dragging && moved)
         {
             var delta = (mouseWorld - downWorld).Snap(Plan.Grid);
-            if (Transform != TransformKind.Translation && SelectedAnnotations.Count == 0) UpdateTransformDrag(shift);
+            if (Transform != TransformKind.Translation) UpdateTransformDrag(shift);
             else
             {
                 foreach (var pair in original) VertexAt(pair.Key).P = pair.Value + delta;
                 foreach (var note in Plan.Annotations.Where(a => originalAnnotations.ContainsKey(a.Id)))
                 {
-                    var target = originalAnnotations[note.Id] + delta;
-                    if (original.Count == 0 && originalAnnotations.Count == 1) target = SnapAnnotation(originalAnnotations[note.Id] + mouseWorld - downWorld);
+                    var target = originalAnnotations[note.Id].Position + delta;
+                    if (original.Count == 0 && originalAnnotations.Count == 1) target = SnapAnnotation(originalAnnotations[note.Id].Position + mouseWorld - downWorld);
                     note.X = target.X; note.Y = target.Y;
                 }
             }

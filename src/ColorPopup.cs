@@ -1,8 +1,9 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Input;
 namespace Coat;
 internal static class ColorUi
 {
@@ -42,18 +43,32 @@ public partial class MainWindow
         Button? button=null;
         void Refresh(string value){button!.Content=new Image {Source=ColorUi.ButtonIcon(value),Width=64,Height=30};button.ToolTip=L.T(label)+" · "+value;}
         void Open(){ShowColorPopup(new ColorPicker(this,current()),button!,hex=>{apply(hex);Refresh(hex);});}
-        button=Button("",Open);button.HorizontalAlignment=HorizontalAlignment.Left;button.Padding=new Thickness(6,3,6,3);Refresh(current());
-        System.Windows.Automation.AutomationProperties.SetName(button,L.T(label));RegisterFeature(L.T(label),Open);return button;
+        button=Button("",Open,label);button.HorizontalAlignment=HorizontalAlignment.Left;button.Padding=new Thickness(6,3,6,3);Refresh(current());
+        SetHint(button,L.T(label),L.T("Réglez la couleur ou prélevez-la sur le plan."));RegisterFeature(L.T(label),Open);return button;
     }
     internal void ShowColorPopup(ColorPicker picker,FrameworkElement anchor,Action<string>? apply=null)
     {
         CloseColorPicker(false);Canvas.Anchor=null;
         ActiveColorPicker=picker;colorDocument=Document;colorBefore=Document.Serialize();
-        var popup=new Popup {PlacementTarget=anchor,Placement=PlacementMode.Left,HorizontalOffset=-8,AllowsTransparency=true,StaysOpen=false};
+        var popup=new Popup {PlacementTarget=anchor,Placement=PlacementMode.Left,HorizontalOffset=-8,AllowsTransparency=true,StaysOpen=true};
+        // A swatch context menu owns a separate HWND. Native popup capture would
+        // dismiss the color editor as soon as that menu opens.
+        PreviewMouseDown += OutsideColorClick;
+        Deactivated += CloseInactiveColorPopup;
         colorPopup=popup;popup.Child=new ScrollViewer {Content=picker,MaxHeight=Math.Max(250,Math.Min(570,ActualHeight-64)),VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};
         string last=picker.SelectedHex;
         picker.Changed+=hex=>{if(ActiveColorPicker!=picker||hex==last)return;last=hex;apply?.Invoke(hex);Canvas.InvalidateColors();};
         popup.Closed+=(_,_)=>{if(!popup.IsOpen&&!suspendColorPopup&&ReferenceEquals(colorPopup,popup))FinishColorPopup();};popup.IsOpen=true;picker.Wheel.Focus();
+    }
+    private void OutsideColorClick(object sender, MouseButtonEventArgs e)
+    {
+        if (colorPopup?.IsOpen != true || e.OriginalSource is not Visual source) return;
+        if (PresentationSource.FromVisual(source) == PresentationSource.FromVisual(this))
+            CloseColorPicker(false);
+    }
+    private void CloseInactiveColorPopup(object? sender, EventArgs e)
+    {
+        if (colorPopup?.IsOpen == true) CloseColorPicker(false);
     }
     internal void CloseColorPicker(bool refresh=true)
     {
@@ -67,6 +82,7 @@ public partial class MainWindow
         var popup=colorPopup;if(popup==null)return;
         bool refresh=refreshColorPopup;refreshColorPopup=true;
         var before=colorBefore;var document=colorDocument;
+        PreviewMouseDown -= OutsideColorClick; Deactivated -= CloseInactiveColorPopup;
         colorPopup=null;ActiveColorPicker=null;colorBefore=null;colorDocument=null;popup.Child=null;
         if(before!=null&&document==Document&&before!=Document.Serialize())History.Push(before);
         if(refresh){UpdateInspector();UpdateStatus();}else UpdateTitle();

@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -191,13 +191,13 @@ public partial class MainWindow
     }
     private void WallColorControls()
     {
-        Divider(); Heading(L.T("EXPORT .MAP"));
+        
         var color = ColorButton(() => Document.WallColor, value => Document.WallColor = value, "Couleur des murs…");
         inspector.Children.Add(color);
         var line = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 7, 0, 7) };
-        line.Children.Add(new Border { Width = 18, Height = 18, Background = B(Document.WallColor), BorderBrush = B("#96A7BC"), BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 8, 0) });
+        line.Children.Add(new Border { Width = 18, Height = 18, Background = EditorCanvas.Brush(Document.WallColor), BorderBrush = B("#96A7BC"), BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 8, 0) });
         line.Children.Add(new TextBlock { Text = Document.WallColor }); inspector.Children.Add(line);
-        inspector.Children.Add(Button(L.T("Définir la couleur actuelle comme mur"), () => SetWallColor(Canvas.PaintColor)));
+        inspector.Children.Add(Button(L.T("Définir la couleur actuelle comme mur"), () => SetWallColor(Canvas.PaintColor), "Définir la couleur des murs"));
         ToolHint(L.T("Seules les zones remplies avec cette couleur deviennent des murs à l’export .map. Base : Z du niveau. Haut : Z du niveau suivant, ou +192 unités au dernier niveau."));
         ToolHint(L.T("Autres couleurs : sols de 16 unités d’épaisseur, surface au Z du niveau. Sans remplissage : aucun objet exporté."));
     }
