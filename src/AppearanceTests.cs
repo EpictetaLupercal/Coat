@@ -60,7 +60,7 @@ internal static partial class InterfaceLayoutTests
             window.ChangeLanguage(language); window.SetTool(EditorTool.Draw); Layout(window);
             var controls=Children<Button>(window).Where(b=>b.Content is System.Windows.Shapes.Path).ToList();
             var toolbar=controls.Where(b=>b.TranslatePoint(new Point(),window).Y<100).ToList();
-            check(toolbar.Count==10 && toolbar.All(b=>b.ActualWidth>=30 && b.TranslatePoint(new Point(b.ActualWidth,0),window).X<=window.ActualWidth &&
+            check(toolbar.Count==11 && toolbar.All(b=>b.ActualWidth>=30 && b.TranslatePoint(new Point(b.ActualWidth,0),window).X<=window.ActualWidth &&
                 AutomationProperties.GetName(b).Length>0 && AutomationProperties.GetHelpText(b).Length>0),language+" toolbar icons fit at minimum size and expose name and help");
             var dimension=toolbar.Single(b=>AutomationProperties.GetName(b)==L.T("Cotation"));
             dimension.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

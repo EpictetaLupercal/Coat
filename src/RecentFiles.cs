@@ -43,6 +43,6 @@ public partial class MainWindow
     internal void OpenRecent(string path)
     {
         if (!File.Exists(path)) { Notify(L.T("Ce fichier a été déplacé ou supprimé : ") + path); return; }
-        Canvas.CancelGesture(); if (!TestMode && !CheckSave()) return; OpenPath(path);
+        OpenPath(path);
     }
 }

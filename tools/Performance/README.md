@@ -34,3 +34,15 @@ The compositor-managed drawing cache is bounded to sixteen million pixels and re
 Vertex lookup and per-level render lists replace repeated linear scans. Normalization uses spatial buckets for coincident points, sorted per-level edge intervals for candidate intersections, and binary searches for split-point candidates. Dense intersecting geometry can still produce quadratic work; recursion alone would not reduce that complexity. Group expansion uses an indexed queue to visit reachable groups without repeated global scans.
 
 See [the 1.0.6 review](../../docs/PERFORMANCE-1.0.6.md) for measurements, limitations, and validation.
+
+## Minimap and camera panning probe
+
+Run `Performance.exe <input.coat> <output-directory> --navigation-ab <path-to-PresentMon.exe>` for six seven-second right-button pans. The pointer follows the same time-based trajectory in each run, reaching 6,857 horizontal DIPs per second. The runs alternate a live camera indicator, a hidden minimap, and a five-second camera interval. Each reported FPS window excludes the first 1.2 seconds and the final 0.2 seconds. The JSON includes the OpenGL device, rendered frames, topology rebuilds and displayed FPS per dominant swap chain. Use `--images-only` for the GPU/reference comparison without the benchmark.
+
+## Wheel zoom probe
+
+Run `Performance.exe <input.coat> <output-directory> --zoom-ab <path-to-PresentMon.exe>` for rapid alternating wheel zoom at a fixed viewport point. The probe requests up to 25 wheel steps per second and records the OpenGL scene rebuild count and presented FPS with the minimap visible and hidden. It also checks the zoom anchor and the full detail redraw after the gesture. Add `--images-only` to run the final zoom checks and capture the GPU and reference images without a timing run.
+
+## Document lifecycle probe
+
+Run `Performance.exe <input.coat> <output-directory> --lifecycle <alternate.coat>` to measure repeated opens, document switches and interface rebuilds. The JSON distinguishes managed allocations, live managed memory after collection, process private memory and the Skia resource cache. The probe checks that a modified file still reloads and that undo records share reference image data.

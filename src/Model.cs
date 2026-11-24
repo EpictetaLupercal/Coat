@@ -1,4 +1,4 @@
-﻿// Coat — Epicteta Lupercal
+// Coat — Epicteta Lupercal
 using System.IO;
 using System.Text.Json;
 
@@ -343,9 +343,11 @@ public partial class Plan
     }
     public static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     public string Serialize() => JsonSerializer.Serialize(this, JsonOptions);
-    public static Plan Parse(string json)
+    public static Plan Parse(string json) =>
+        Validate(JsonSerializer.Deserialize<Plan>(json) ?? throw new InvalidDataException(L.T("Le fichier est vide.")));
+
+    internal static Plan Validate(Plan p)
     {
-        var p = JsonSerializer.Deserialize<Plan>(json) ?? throw new InvalidDataException(L.T("Le fichier est vide."));
         if (p.Version < 1 || p.Version > 6) throw new InvalidDataException(L.T("Version du fichier non prise en charge."));
         if (p.Version == 1) { p.ActiveLevel = 0; p.Levels = new() { 0 }; foreach (var v in p.Vertices ?? new()) v.Level = 0; }
         if (p.Version < 3) p.Groups = new();
@@ -389,12 +391,30 @@ public partial class Plan
 
 public class History
 {
-    private readonly List<string> undo = new();
-    private readonly List<string> redo = new();
+    private readonly List<PlanSnapshot> undo = new();
+    private readonly List<PlanSnapshot> redo = new();
     public bool CanUndo => undo.Count > 0;
     public bool CanRedo => redo.Count > 0;
-    public void Push(string before) { undo.Add(before); if (undo.Count > 100) undo.RemoveAt(0); redo.Clear(); }
-    public Plan? Undo(Plan current) { if (!CanUndo) return null; redo.Add(current.Serialize()); var s = undo[^1]; undo.RemoveAt(undo.Count - 1); return Plan.Parse(s); }
-    public Plan? Redo(Plan current) { if (!CanRedo) return null; undo.Add(current.Serialize()); var s = redo[^1]; redo.RemoveAt(redo.Count - 1); return Plan.Parse(s); }
+    public void Push(string before) => Push(PlanSnapshot.Capture(Plan.Parse(before)));
+
+    internal void Push(PlanSnapshot before)
+    {
+        undo.Add(before);
+        if (undo.Count > 100) undo.RemoveAt(0);
+        redo.Clear();
+    }
+
+    public Plan? Undo(Plan current) => Restore(current, undo, redo);
+    public Plan? Redo(Plan current) => Restore(current, redo, undo);
+
+    private static Plan? Restore(Plan current, List<PlanSnapshot> source, List<PlanSnapshot> destination)
+    {
+        if (source.Count == 0) return null;
+        var restored = source[^1].Restore();
+        destination.Add(PlanSnapshot.Capture(current));
+        source.RemoveAt(source.Count - 1);
+        return restored;
+    }
+
     public void Clear() { undo.Clear(); redo.Clear(); }
 }

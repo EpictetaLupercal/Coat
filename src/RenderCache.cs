@@ -41,6 +41,7 @@ public partial class EditorCanvas
     private Dictionary<int, Vertex[]> verticesByLevel = new();
     private Dictionary<int, Edge[]> edgesByLevel = new();
     private Dictionary<int, Face[]> facesByLevel = new();
+    private Dictionary<string, List<string>> faceHoles = new();
     private Dictionary<string, (Geometry Geometry, Rect Bounds)> faceGeometry = new();
     internal int RenderCacheBuilds { get; private set; }
     private Vertex VertexAt(int id) => renderVertices[id];
@@ -63,6 +64,7 @@ public partial class EditorCanvas
     {
         cachedScene = null; navigationBrush = null; faceGeometry.Clear();
         var regions = new ContourRegions(faces, renderVertices.ToDictionary(p => p.Key, p => p.Value.P));
+        faceHoles = regions.Holes;
         foreach (var face in faces)
         {
             var geometry = ContourRegions.Geometry(regions.Loops(face.Key));
@@ -113,7 +115,7 @@ public partial class EditorCanvas
             path.Freeze(); dc.DrawGeometry(null, CachedPen(batch.Key.Color, batch.Key.Width, batch.Key.Style), path);
         }
     }
-    private void DrawVertexBatch(DrawingContext dc, Vertex[] vertices, HashSet<int> selectedPoints)
+    private void DrawVertexBatch(DrawingContext dc, IEnumerable<Vertex> vertices, HashSet<int> selectedPoints)
     {
         double radius = Mode == SelectionMode.Vertex && Tool == EditorTool.Select ? 4 : 2.6;
         foreach (var batch in vertices.GroupBy(v => selectedPoints.Contains(v.Id)))

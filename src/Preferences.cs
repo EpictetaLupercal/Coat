@@ -14,19 +14,28 @@ public record Shortcut(Key Key, ModifierKeys Modifiers)
 }
 public record ShortcutAction(string Label, Shortcut Command, Shortcut Default)
 {
+    internal bool IsView3D => Label == ShortcutSettings.View3DFrameAction;
+    internal bool HasExplicitDefault => IsView3D || Label is "Confirmer" or ShortcutSettings.FocusAction;
+
     public string Category => Label.StartsWith("Grille ") ? "Grille" : Label switch
     {
         "Nouveau" or "Ouvrir" or "Enregistrer" or "Enregistrer sous" or "Importer une image" or "Exporter en PNG…" or "Exporter en SVG…" or "Exporter en .map…" or "Quitter" or "Charger le plan d’exemple" or "Ouvert récemment" or "Effacer la liste" => "Fichiers",
         "Sélection" or "Dessin" or "Gomme" or "Coloriage" or "Shapes" or "Annotations" or "Rectangle" or "Cercle" or "Escaliers droits" or "Escaliers en L" or "Escaliers en U" or "Escaliers en colimaçon" or "Aucun outil" => "Outils",
         "Sélection de points" or "Sélection d’arêtes" or "Sélection de zones" or "Translation" or "Rotation" or "Échelle" or "Sélection sur plusieurs niveaux" or "Ignorer les groupes" or "Organisation" or "Renommer le groupe" or "Sélectionner le groupe suivant" => "Sélection et transformations",
         "Aide" or "Préférences" => "Interface",
-        _ when Label.StartsWith("Vue ") || Label.StartsWith("Niveau") || Label is "Cadrer" or "Grille visible" or "Longueurs visibles" => "Navigation et affichage",
+        ShortcutSettings.View3DFrameAction => "Vue 3D",
+        _ when Label.StartsWith("Vue ") || Label.StartsWith("Niveau") || Label is "Cadrer" or "Grille visible" or "Longueurs visibles" or ShortcutSettings.FocusAction => "Navigation et affichage",
         _ => "Édition"
     };
 }
 public class ShortcutSettings
 {
+    internal const string View3DFrameAction = "Cadrer le cube (Vue 3D)";
+    internal const string FocusAction = "Mode Focus";
+    internal static readonly Shortcut FocusDefault = new(Key.Oem2, ModifierKeys.None);
     internal static readonly string[] FeatureLabels = {
+        FocusAction, "Ping : repère", "Ping : à revoir", "Ping : à tester",
+        "Miroir", "Modificateurs", "Appliquer le miroir", "Appliquer le booléen",
         "Ignorer les groupes", "Dissoudre les sommets", "Dissoudre les arêtes", "Cote", "Appliquer la cote", "Utiliser les réglages du jeton", "Ronde", "Jeton", "Dégradé", "Remplissage", "Double flèche", "Appliquer les flèches", "Appliquer le dégradé",
         "Accrochage : sommets, milieux et grille", "Flèche au début", "Flèche à la fin", "Triangle", "Ouverte", "Diamant", "Couleur de fin…", "Appliquer le jeton", "Supprimer le jeton",
         "Exporter en PNG…", "Exporter en SVG…", "Exporter en .map…", "Charger le plan d’exemple", "Quitter", "Revenir à l’origine", "À propos de Coat",
@@ -41,12 +50,15 @@ public class ShortcutSettings
     public Dictionary<string, Shortcut> Bindings { get; set; } = UnassignedBindings();
     public string Theme { get; set; } = "classic";
     public bool AnimatedMenus { get; set; } = true;
+    public bool SelectionFeedback { get; set; } = true;
+    public bool ConstructionFeedback { get; set; } = true;
+    public EditorAudioSettings Audio { get; set; } = new();
     public string Language { get; set; } = "en";
     public int ShortcutVersion { get; set; }
     public static readonly Shortcut Unassigned = new(Key.None, ModifierKeys.None);
-    public static Dictionary<string, Shortcut> UnassignedBindings() => Actions.ToDictionary(a => a.Label, a => a.Label == "Confirmer" ? new Shortcut(Key.Enter, ModifierKeys.None) : new Shortcut(Key.None, ModifierKeys.None));
+    public static Dictionary<string, Shortcut> UnassignedBindings() => Actions.ToDictionary(a => a.Label, a => a.HasExplicitDefault ? a.Default : Unassigned);
     public static Dictionary<string, Shortcut> ErgonomicBindings() => Actions.ToDictionary(a => a.Label, a => a.Default);
-    public static Dictionary<string, Shortcut> ClassicBindings() => Actions.ToDictionary(a => a.Label, a => a.Command);
+    public static Dictionary<string, Shortcut> ClassicBindings() => Actions.ToDictionary(a => a.Label, a => a.Label == FocusAction ? a.Default : a.Command);
     private static List<ShortcutAction> CreateActions()
     {
         var list = new List<ShortcutAction>();
@@ -67,17 +79,19 @@ public class ShortcutSettings
         for (int i = 0; i < 10; i++) { Add("Grille " + steps[i] + " u", i == 9 ? Key.D0 : Key.D1 + i); Add("Grille " + steps[i] + " u (pavé)", i == 9 ? Key.NumPad0 : Key.NumPad1 + i); }
         foreach (var label in FeatureLabels) list.Add(new(label, new(Key.None, ModifierKeys.None), new(Key.None, ModifierKeys.None)));
         list.Add(new("Confirmer", new(Key.Enter, ModifierKeys.None), new(Key.Enter, ModifierKeys.None)));
+        Add(View3DFrameAction, Key.F);
         return list.Select(a => a with { Default = a.Label switch
         {
             "Sélection de points" => new(Key.Z, ModifierKeys.None),
             "Sélection d’arêtes" => new(Key.X, ModifierKeys.None),
             "Cadrer" => new(Key.A, ModifierKeys.None),
+            FocusAction => FocusDefault,
             _ => a.Command
         } }).ToList();
     }
     public bool Translate(ref Key key, ref ModifierKeys modifiers)
     {
-        var gesture = new Shortcut(key, modifiers); var action = Actions.FirstOrDefault(a => gesture.Key != Key.None && Bindings.GetValueOrDefault(a.Label) == gesture);
+        var gesture = new Shortcut(key, modifiers); var action = Actions.FirstOrDefault(a => !a.IsView3D && gesture.Key != Key.None && Bindings.GetValueOrDefault(a.Label) == gesture);
         if (action == null) return false;
         key = action.Command.Key; modifiers = action.Command.Modifiers; return true;
     }
@@ -86,7 +100,7 @@ public class ShortcutSettings
         if (bindings.Count != Actions.Count || Actions.Any(a => !bindings.ContainsKey(a.Label))) throw new InvalidDataException(L.T("Raccourcis invalides, réservés ou en double."));
         var assigned = bindings.Where(p => p.Value != Unassigned).ToList();
         if (assigned.Any(p => p.Value == null || !Enum.IsDefined(p.Value.Key) || p.Value.Key is Key.None or Key.System or Key.ImeProcessed or Key.DeadCharProcessed or Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin || (p.Value.Modifiers & ~(ModifierKeys.Alt | ModifierKeys.Control | ModifierKeys.Shift)) != 0 || p.Value.Key == Key.Space && p.Value.Modifiers == ModifierKeys.None || p.Value.Key == Key.F4 && p.Value.Modifiers == ModifierKeys.Alt)) throw new InvalidDataException(L.T("Raccourcis invalides, réservés ou en double."));
-        var conflict = assigned.GroupBy(p => p.Value).FirstOrDefault(g => g.Count() > 1);
+        var conflict = assigned.GroupBy(p => (p.Key == View3DFrameAction, p.Value)).FirstOrDefault(g => g.Count() > 1);
         if (conflict != null) throw new InvalidDataException(L.T("Conflit de raccourci : ") + string.Join(" / ", conflict.Select(p => L.ShortcutLabel(p.Key))));
     }
 
@@ -97,10 +111,12 @@ public class ShortcutSettings
         string json = File.ReadAllText(path); using var document = JsonDocument.Parse(json);
         var settings = document.RootElement.TryGetProperty("Bindings", out _) ? JsonSerializer.Deserialize<ShortcutSettings>(json) : new ShortcutSettings { Bindings = JsonSerializer.Deserialize<Dictionary<string, Shortcut>>(json)! };
         var bindings = settings?.Bindings ?? throw new InvalidDataException(L.T("Préférences vides."));
-        // Never migrate a user's keys or invent shortcuts for newly introduced commands.
+        // Preserve existing bindings, including a deliberate unassignment or an occupied default key.
         foreach (var action in Actions.Where(a => !bindings.ContainsKey(a.Label)))
-            bindings[action.Label] = action.Label == "Confirmer" && !bindings.Values.Contains(new Shortcut(Key.Enter, ModifierKeys.None)) ? new(Key.Enter, ModifierKeys.None) : Unassigned;
+            bindings[action.Label] = action.HasExplicitDefault &&
+                !bindings.Any(p => (p.Key == View3DFrameAction) == action.IsView3D && p.Value == action.Default) ? action.Default : Unassigned;
         settings!.ShortcutVersion = 2;
+        settings.Audio ??= new();
         Validate(bindings); settings!.Language = L.Normalize(settings.Language); return settings;
     }
 }
@@ -132,6 +148,7 @@ public partial class MainWindow
     {
         try { Shortcuts = ShortcutSettings.Load(PreferencesPath); ChangeLanguage(Shortcuts.Language); LoadRecent(); }
         catch (Exception ex) { Notify(L.T("Préférences non chargées : ") + ex.Message); }
+        if (!TestMode) editorSounds.Configure(Shortcuts.Audio);
     }
     private static Shortcut? ParseHint(string text)
     {
@@ -141,7 +158,7 @@ public partial class MainWindow
     }
     private string CurrentHint(Shortcut original)
     {
-        var action = ShortcutSettings.Actions.FirstOrDefault(a => a.Command == original);
+        var action = ShortcutSettings.Actions.FirstOrDefault(a => !a.IsView3D && a.Command == original);
         return action == null ? original.ToString() : Shortcuts.Bindings[action.Label].Key == Key.None ? "" : Shortcuts.Bindings[action.Label].ToString();
     }
     private void RefreshShortcutHints()
@@ -167,9 +184,15 @@ public partial class MainWindow
         appearance.Children.Add(theme); languageRow.Children.Insert(1,appearance);
         var animatedMenus = new CheckBox { Content = L.T("Décorations animées des menus"), IsChecked = Shortcuts.AnimatedMenus };
         languageRow.Children.Insert(2, animatedMenus);
+        var feedbackOptions = new StackPanel { Orientation = Orientation.Horizontal };
+        var selectionFeedback = new CheckBox { Content = L.T("Effets de sélection"), IsChecked = Shortcuts.SelectionFeedback, Margin = new Thickness(0, 6, 18, 6) };
+        var constructionFeedback = new CheckBox { Content = L.T("Effets de construction"), IsChecked = Shortcuts.ConstructionFeedback };
+        feedbackOptions.Children.Add(selectionFeedback);
+        feedbackOptions.Children.Add(constructionFeedback);
+        languageRow.Children.Insert(3, new Expander { Header = L.T("Retour visuel des interactions"), Content = feedbackOptions });
         languageRow.Children.Add(new TextBlock { Text = L.T("Le changement de langue s’applique à l’enregistrement, sans redémarrage."), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
         languageRow.Children.Add(new TextBlock { Text = L.T("Raccourcis clavier"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 20, 0, 0) });
-        var intro = new TextBlock { Text = L.T("Les raccourcis sont facultatifs. Cliquez sur une touche pour la modifier, ou sur × pour la supprimer. Les conflits sont refusés. Les nouveaux raccourcis restent non attribués."), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) }; DockPanel.SetDock(intro, Dock.Top); root.Children.Add(intro);
+        var intro = new TextBlock { Text = L.T("Les raccourcis sont facultatifs. Cliquez sur une touche pour la modifier, ou sur × pour la supprimer. Les conflits dans une même fenêtre sont refusés."), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) }; DockPanel.SetDock(intro, Dock.Top); root.Children.Add(intro);
         var searchRow = new StackPanel { Margin = new Thickness(0, 0, 0, 12) }; DockPanel.SetDock(searchRow, Dock.Top); root.Children.Add(searchRow);
         searchRow.Children.Add(new TextBlock { Text = L.T("Rechercher un raccourci"), Margin = new Thickness(0, 0, 0, 5) });
         var search = new TextBox { Padding = new Thickness(7), Background = Brushes.White, Foreground = Brushes.Black };
@@ -219,7 +242,26 @@ public partial class MainWindow
         AddButton(L.T("Ergonomique"), () => { draft = ShortcutSettings.ErgonomicBindings(); message.Text = ""; Populate(); });
         AddButton(L.T("Classique"), () => { draft = ShortcutSettings.ClassicBindings(); message.Text = ""; Populate(); });
         AddButton(L.T("Annuler"), dialog.Close);
-        AddButton(L.T("Enregistrer"), () => { try { var next = new ShortcutSettings { Bindings = draft, Theme = Shortcuts.Theme, AnimatedMenus = animatedMenus.IsChecked == true, Language = language.SelectedIndex == 1 ? "fr" : "en" }; next.Save(settingsPath ?? PreferencesPath); Shortcuts = next; dialog.Close(); ChangeLanguage(next.Language); } catch (Exception ex) { message.Text = L.T("Enregistrement impossible : ") + ex.Message; } });
+        AddButton(L.T("Enregistrer"), () =>
+        {
+            try
+            {
+                var next = new ShortcutSettings
+                {
+                    Bindings = draft, Theme = Shortcuts.Theme, AnimatedMenus = animatedMenus.IsChecked == true, Audio = Shortcuts.Audio,
+                    SelectionFeedback = selectionFeedback.IsChecked == true, ConstructionFeedback = constructionFeedback.IsChecked == true,
+                    Language = language.SelectedIndex == 1 ? "fr" : "en"
+                };
+                next.Save(settingsPath ?? PreferencesPath);
+                bool rebuildInterface = next.Language != L.Language || next.AnimatedMenus != Shortcuts.AnimatedMenus;
+                Shortcuts = next;
+                Canvas.Feedback.Clear();
+                dialog.Close();
+                if (rebuildInterface) ChangeLanguage(next.Language);
+                else RefreshShortcutHints();
+            }
+            catch (Exception ex) { message.Text = L.T("Enregistrement impossible : ") + ex.Message; }
+        });
         void StyleDialog()
         {
             dialogHints.RefreshPalette();

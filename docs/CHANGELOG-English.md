@@ -1,4 +1,97 @@
-# Coat 1.3.8 — Epicteta Lupercal
+# Coat 1.7.2 — Epicteta Lupercal
+
+## 1.7.2 — Lower overhead when reopening plans
+
+Reopening the current plan preserves its editor state. The OpenGL context survives interface changes, and undo shares unchanged reference image data across snapshots.
+
+
+## 1.7.1 — Smoother wheel zoom
+
+The OpenGL viewport reuses the existing drawing during rapid wheel zoom and restores full detail at the final zoom level.
+
+
+## 1.7 — OpenGL viewports
+
+The plan and the orbiting cube now render using OpenGL. Camera panning reuses the recorded scene and cached GPU pixels. The minimap keeps its cached topology and updates its camera indicator as you move.
+
+## 1.6.5 — Faster camera panning
+
+- Mouse movements during a pan are coalesced into one viewport update per frame.
+- Decorative menu animations pause while panning and resume from the same position afterward.
+- The minimap displays a low-resolution silhouette of all outlines in one color. While the camera moves, its frame and markers update over the cached silhouette.
+
+## 1.6.4 — Displayed application FPS
+
+- The status bar uses PresentMon events for Coat's process to measure frames displayed on screen. It shows an unavailable reading when Windows graphics tracing is denied.
+
+## 1.6.3 — Viewport FPS
+
+- The status bar shows how often the 2D viewport redraws.
+
+## 1.6.2 — Straight minimap and ping pulses
+
+- The minimap follows the plan axes. A small edge arrow points toward the camera when its center is outside the minimap.
+- A new ping sends out a short, expanding halo in the plan and the minimap.
+
+## 1.6.1 — Minimap drawer
+
+- The minimap handle slides down to the ping buttons when the map is folded and returns to the top when reopened.
+
+## 1.6 — Minimap, pings, and project progression
+
+- Use the foldable 45° minimap in the lower left to inspect visible levels, center the camera or drag its viewport frame without changing zoom.
+- Place Landmark, Review and Playtest pings from either view. Right-click to pin a ping as an editable project marker. Ping shortcuts are unassigned and the ping sound can be changed in the sound preferences.
+- The viewport HUD shows project level, exact XP on hover, and contextual commands. Save, create, export and complete the project quests to earn XP. Each project keeps its own progress.
+
+## 1.5.5 — Full selection outlines
+
+- The halo lights the entire selected edge or face outline immediately. Face outlines glow more strongly and include the borders of holes.
+
+## 1.5.4 — Edge and face selection feedback
+
+- Selecting an edge or face shows a short contracting halo at the click. The edge highlight spreads in both directions, and face highlights follow the outer and inner contours.
+
+## 1.5.3 — Extrusion feedback
+
+- Committing an extrusion by Shift-drag or by offset plays the construction highlight when it creates a closed area.
+
+## 1.5.2 — Interaction feedback
+
+- Brief halos and highlights mark point, edge and face selection, marquee selection and completed moves.
+- Closing a drawn area or placing a shape triggers a construction highlight. Stairs animate in the direction of ascent.
+- **Preferences → Interaction Feedback** controls selection and construction independently. The effects follow the Windows animation preference and stay out of exports.
+
+## 1.5.1 — Selection modes
+
+- Vertex, edge and face selection now appear at the start of the Select tool's contextual bar, beside its transform controls.
+
+## 1.5 — Contextual tool options
+
+- A contextual bar below the main toolbar keeps selection transforms, shape presets and common numeric controls near the canvas.
+- The inspector retains selection properties, group controls, extrusion settings and detailed stair settings.
+
+## 1.4.3 — Toolbar and inspector
+
+- The grouped toolbar gives direct access to vertex, edge and face selection and keeps Dimension between Draw and Erase.
+- Right-click in Select mode for grouping, moving to a level, isolating or mirroring a selection, and existing geometry commands.
+- The inspector has three tabs: **Plan**, **Select** and **Modifiers**. The **Plan** tab contains level settings, a collapsible preview and the reference image.
+
+## 1.4.2 — Focus Mode
+
+- Press **/** with a selection to isolate and frame it in the 2D view. Press **/** again to restore the previous camera. The shortcut can be changed in Preferences.
+
+## 1.4.1 — Mirror and Boolean
+
+- Reflect a selection around a horizontal or vertical axis with **Mirror**. Enable **Keep original** to create a reflected copy.
+- The **Modifiers** tab previews Boolean union, difference and intersection before applying them. Pick two closed areas on the active level or draw a temporary rectangle as the second operand. Applying the result is undoable.
+
+## 1.4 — Editor sounds
+
+- Selection and drawing play short, distinct clicks. In **Options → Editor Sounds**, adjust the volume, enable either sound independently, preview a sound, or choose a local WAV file. Coat uses its built-in sound if a custom file is missing or cannot be played.
+
+## 1.3.9 — 3D View
+
+- Open **Options → 3D View** for a separate window with a centered cube. Drag with the left mouse button to orbit and scroll to zoom. Press **F** in that window to frame the cube. The shortcut can be changed in Preferences.
 
 ## 1.3.8 — Inspector background
 

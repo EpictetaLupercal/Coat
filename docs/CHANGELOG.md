@@ -1,4 +1,97 @@
-# Coat 1.3.8 — Epicteta Lupercal
+# Coat 1.7.2 — Epicteta Lupercal
+
+## 1.7.2 — Réouverture des plans allégée
+
+Rouvrir le plan actif conserve son état dans l’éditeur. Le contexte OpenGL est réutilisé lors des changements d’interface et les entrées d’annulation partagent les données de l’image de référence.
+
+
+## 1.7.1 — Zoom à la molette plus fluide
+
+Le rendu OpenGL réutilise le dessin pendant les zooms rapides et restitue les détails à l’échelle finale après l’arrêt de la molette.
+
+
+## 1.7 — Vues OpenGL
+
+Le plan et le cube en orbite utilisent OpenGL. Le panoramique réutilise la scène enregistrée et les pixels en mémoire GPU. La minicarte garde sa topologie en cache et actualise le cadre de caméra pendant le déplacement.
+
+## 1.6.5 — Panoramique et minicarte allégés
+
+- Pendant un panoramique, les mouvements de souris sont regroupés en une mise à jour de la vue par image.
+- Les animations décoratives des menus se mettent en pause pendant le panoramique et reprennent à la même position au relâchement.
+- La minicarte affiche une silhouette monochrome approximative du plan. Le cadre de caméra et les marqueurs se déplacent par-dessus cette silhouette mise en cache.
+
+## 1.6.4 — FPS affichés de l’application
+
+- La barre d’état utilise les événements PresentMon du processus Coat pour mesurer ses images affichées. Elle indique que la mesure est indisponible lorsque Windows refuse la trace graphique.
+
+## 1.6.3 — Compteur FPS
+
+- La barre d’état affiche la fréquence de rafraîchissement de la vue 2D.
+
+## 1.6.2 — Minicarte à plat et halo des pings
+
+- La minicarte suit les axes du plan. Une petite flèche sur son bord indique la direction de la caméra quand son centre sort de la carte.
+- Chaque nouveau ping déclenche un halo qui s’agrandit avant de s’effacer dans le plan et la minicarte.
+
+## 1.6.1 — Volet de la minicarte
+
+- La poignée descend jusqu’aux boutons de ping quand la carte se replie et retrouve le sommet à la réouverture.
+
+## 1.6 — Minicarte, pings et progression par projet
+
+- La minicarte repliable à 45°, en bas à gauche, montre les niveaux visibles. Cliquez sur la carte ou glissez le cadre pour centrer la vue sans changer le zoom.
+- Posez un ping Repère, À revoir ou À tester depuis les deux vues. Le clic droit permet d’épingler le ping en marqueur modifiable. Les raccourcis de ping sont libres et leur son se règle dans les préférences.
+- Le HUD affiche le niveau, l’XP précise au survol et les commandes contextuelles. La sauvegarde, la création, l’export et les quêtes font progresser chaque projet séparément.
+
+## 1.5.5 — Halo sur toute la sélection
+
+- Le halo illumine immédiatement toute l’arête ou tout le contour de la zone sélectionnée. L’effet est plus marqué sur les zones et suit le bord de leurs trous.
+
+## 1.5.4 — Sélection d’arêtes et de zones
+
+- Un halo se resserre au clic sur une arête ou une zone. L’arête s’illumine dans les deux sens et la surbrillance de la zone suit aussi le contour de ses trous.
+
+## 1.5.3 — Retour visuel de l’extrusion
+
+- Valider une extrusion par Maj+glisser ou par décalage déclenche l’impulsion de construction lorsqu’elle crée une zone fermée.
+
+## 1.5.2 — Retour visuel des interactions
+
+- De brèves surbrillances accompagnent la sélection de points, d’arêtes et de zones, la sélection au rectangle et les déplacements validés.
+- Une impulsion accompagne la fermeture d’un contour ou la création d’une forme. Elle remonte les marches dans le sens de la montée.
+- **Préférences → Retour visuel des interactions** permet de régler séparément la sélection et la construction. Les effets respectent le réglage Windows des animations et restent hors des exports.
+
+## 1.5.1 — Modes de sélection
+
+- Les boutons Points, Arêtes et Zones se trouvent au début de la barre contextuelle de Sélection, devant les transformations.
+
+## 1.5 — Barre d’options contextuelle
+
+- Une barre sous les outils rapproche du plan les transformations, les formes et leurs réglages numériques courants.
+- L’inspecteur conserve les propriétés de la sélection, les groupes, l’extrusion et les réglages détaillés des escaliers.
+
+## 1.4.3 — Barre d’outils et inspecteur
+
+- La barre d’outils regroupe les commandes et donne un accès direct à la sélection de points, d’arêtes et de zones. **Cotation** reste entre **Dessin** et **Gomme**.
+- En mode Sélection, le clic droit permet aussi de grouper, de changer de niveau, d’isoler la sélection et d’ouvrir le miroir.
+- L’inspecteur propose les onglets **Plan**, **Sélection** et **Modificateurs**. **Plan** regroupe les réglages des niveaux, leur aperçu repliable et l’image de référence.
+
+## 1.4.2 — Mode Focus
+
+- Appuyez sur **/** avec une sélection pour l’isoler et la cadrer dans la vue 2D. Appuyez de nouveau sur **/** pour retrouver le cadrage précédent. Le raccourci est configurable dans les préférences.
+
+## 1.4.1 — Miroir et booléen
+
+- **Miroir** retourne la sélection autour d’un axe horizontal ou vertical. Activez **Conserver l’original** pour créer une copie symétrique.
+- L’onglet **Modificateurs** affiche un aperçu de l’union, de la différence ou de l’intersection. Choisissez deux zones fermées du niveau actif ou tracez un rectangle temporaire comme deuxième opérande. L’application du résultat s’annule en une étape.
+
+## 1.4 — Sons de l’éditeur
+
+- La sélection et le dessin jouent chacun un clic bref. Dans **Options → Sons de l’éditeur**, réglez le volume, activez chaque son séparément, écoutez-le ou choisissez un WAV local. Coat utilise son son intégré si le fichier personnalisé est absent ou illisible.
+
+## 1.3.9 — Vue 3D
+
+- **Options → Vue 3D** ouvre une fenêtre avec un cube centré. Maintenez le clic gauche pour tourner autour du cube et utilisez la molette pour zoomer. Dans cette fenêtre, **F** recadre le cube. Le raccourci est personnalisable dans les préférences.
 
 ## 1.3.8 — Fond de l’inspecteur
 

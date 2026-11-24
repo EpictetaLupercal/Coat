@@ -12,7 +12,8 @@ public partial class MainWindow
 {
     private void SaveView()
     {
-        Document.ViewX = Canvas.Center.X; Document.ViewY = Canvas.Center.Y; Document.Zoom = Canvas.Zoom;
+        var (center, zoom) = Canvas.PersistentView;
+        Document.ViewX = center.X; Document.ViewY = center.Y; Document.Zoom = zoom;
         Document.ShowGrid = Canvas.ShowGrid; Document.ShowLengths = Canvas.ShowLengths;
         Document.ShowUpperLevels = Canvas.ShowUpperLevels; Document.ShowLowerLevels = Canvas.ShowLowerLevels;
         Document.SelectAcrossLevels = Canvas.SelectAcrossLevels;

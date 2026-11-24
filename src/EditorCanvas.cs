@@ -5,10 +5,11 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace Coat;
 
-public enum EditorTool { Select, Draw, Erase, Paint, None, Shapes, Annotation, Dimension, Token }
+public enum EditorTool { Select, Draw, Erase, Paint, None, Shapes, Annotation, Dimension, Token, Mirror, Modifiers }
 public enum SelectionMode { Vertex, Edge, Face }
 
 public partial class EditorCanvas : FrameworkElement
@@ -42,13 +43,22 @@ public partial class EditorCanvas : FrameworkElement
     private V2 downWorld;
     private V2 downCenter;
     private bool panning, dragging, marquee, extruding, moved;
-    private string? before;
+    private PlanSnapshot? before;
     private Dictionary<int, V2> original = new();
     private List<(V2 A, V2 B)> extrusionEdges = new();
     private V2 extrusionDelta;
     private BitmapImage? reference;
     private string? referenceData;
     private List<Face> faces = new();
+    private readonly DrawingGroup viewportDrawing = new();
+    private bool panFrameQueued;
+    // Keep the retained scene during a burst of wheel events, then restore screen-space detail.
+    private readonly DispatcherTimer wheelPreview = new(DispatcherPriority.Input)
+    {
+        Interval = TimeSpan.FromMilliseconds(140)
+    };
+    private double sceneZoom = 1;
+    internal int ClosedFaceCount => faces.Count;
     private static readonly Dictionary<string, SolidColorBrush> brushes = new();
     private static readonly Brush GridMinor = Brush("#242D3A"), GridMajor = Brush("#323D4C"), Accent = Brush("#78DCC1"), Text = Brush("#99A7BA");
     public static SolidColorBrush Brush(string color)
@@ -59,27 +69,48 @@ public partial class EditorCanvas : FrameworkElement
     }
     public EditorCanvas(MainWindow host)
     {
-        Host = host; Focusable = true; ClipToBounds = true; Cursor = Cursors.Arrow;
+        Host = host; GlPlan = new OpenGlPlan(this); Focusable = true; ClipToBounds = true; Cursor = Cursors.Arrow;
         MouseDown += OnDown; MouseMove += OnMove; MouseUp += OnUp; MouseWheel += OnWheel;
-        LostMouseCapture += (_, _) => { if (IsColorSampling) CancelColorSampling(); if (dragging || extruding || shaping) CancelGesture(); panning = false; marquee = false; };
+        LostMouseCapture += (_, _) =>
+        {
+            if (IsColorSampling) CancelColorSampling();
+            if (dragging || extruding || shaping) CancelGesture();
+            if (panning) { SetPanning(false); InvalidateVisual(); }
+            marquee = false;
+        };
+        wheelPreview.Tick += (_, _) =>
+        {
+            wheelPreview.Stop();
+            InvalidateVisual();
+        };
+        Unloaded += (_, _) =>
+        {
+            wheelPreview.Stop();
+            CancelPanFrame();
+        };
         MouseLeave += (_, _) => { if (!IsMouseCaptured) { mouseScreen = new Point(-100, -100); InvalidateVisual(); } };
     }
     public Point Screen(V2 p) => new(ActualWidth / 2 + (p.X - Center.X) * Zoom, ActualHeight / 2 - (p.Y - Center.Y) * Zoom);
     public V2 World(Point p) => new(Center.X + (p.X - ActualWidth / 2) / Zoom, Center.Y - (p.Y - ActualHeight / 2) / Zoom);
-    public void RefreshGeometry()
+    public void RefreshGeometry() => RefreshGeometry(null);
+
+    internal void RefreshGeometry(BitmapImage? preparedReference)
     {
         faces = Plan.Faces(); RebuildRenderCache();
         SelectedAnnotations.IntersectWith(Plan.Annotations.Select(a => a.Id));
         if (referenceData != Plan.Background?.Data)
         {
-            reference = null; referenceData = Plan.Background?.Data;
-            if (!string.IsNullOrEmpty(referenceData)) reference = DecodeImage(referenceData);
+            reference = preparedReference ?? ReadReference(Plan.Background?.Data);
+            referenceData = Plan.Background?.Data;
         }
         SelectedVertices.RemoveWhere(id => !renderVertices.ContainsKey(id));
         SelectedEdges.RemoveWhere(id => !renderEdges.ContainsKey(id));
         SelectedFaces.RemoveWhere(key => !renderFaces.ContainsKey(key));
         InvalidateVisual();
     }
+    internal BitmapImage? ReadReference(string? data) =>
+        data == referenceData ? reference : string.IsNullOrEmpty(data) ? null : DecodeImage(data);
+
     public static BitmapImage DecodeImage(string data)
     {
         using var stream = new MemoryStream(Convert.FromBase64String(data));
@@ -119,10 +150,12 @@ public partial class EditorCanvas : FrameworkElement
         Enqueue(byVertex, SelectedVertices); Enqueue(byEdge, SelectionEdges());
         while (pending.TryDequeue(out var group))
         {
-            SelectedVertices.UnionWith(group.VertexIds); SelectedEdges.UnionWith(group.EdgeIds);
-            Enqueue(byVertex, group.VertexIds); Enqueue(byEdge, group.EdgeIds);
+            var vertices = IsSelectionFocused ? group.VertexIds.Where(id => renderVertices.TryGetValue(id, out var vertex) && FocusIncludesVertex(vertex)) : group.VertexIds;
+            var edges = IsSelectionFocused ? group.EdgeIds.Where(id => renderEdges.TryGetValue(id, out var edge) && FocusIncludesEdge(edge)) : group.EdgeIds;
+            SelectedVertices.UnionWith(vertices); SelectedEdges.UnionWith(edges);
+            Enqueue(byVertex, vertices); Enqueue(byEdge, edges);
         }
-        foreach (var face in faces.Where(f => CachedFaceEdges(f).IsSubsetOf(SelectedEdges))) SelectedFaces.Add(face.Key);
+        foreach (var face in faces.Where(f => FocusIncludesFace(f) && CachedFaceEdges(f).IsSubsetOf(SelectedEdges))) SelectedFaces.Add(face.Key);
     }
     private void SelectHit(int? vertex, int? edge, Face? face, bool ctrl, bool individual = false)
     {
@@ -135,6 +168,12 @@ public partial class EditorCanvas : FrameworkElement
         bool already = SelectedVertices.IsSubsetOf(oldV) && SelectedEdges.IsSubsetOf(oldE) && SelectedFaces.IsSubsetOf(oldF);
         if (ctrl && already) { oldV.ExceptWith(SelectedVertices); oldE.ExceptWith(SelectedEdges); oldF.ExceptWith(SelectedFaces); ClearSelection(); IndividualSelection = precise; }
         if (!individual && ((ctrl && !already) || already)) { SelectedVertices.UnionWith(oldV); SelectedEdges.UnionWith(oldE); SelectedFaces.UnionWith(oldF); SelectedAnnotations.UnionWith(oldAnnotations); }
+        if (!already || individual && (oldV.Count != SelectedVertices.Count || oldE.Count != SelectedEdges.Count ||
+            oldF.Count != SelectedFaces.Count || oldAnnotations.Count != SelectedAnnotations.Count))
+        {
+            Host.PlayEditorSound(EditorSoundCue.Selection);
+            SelectionFeedback(vertex, edge, face);
+        }
     }
     public HashSet<int> SelectionPoints()
     {
@@ -147,13 +186,15 @@ public partial class EditorCanvas : FrameworkElement
     {
         if (Tool != EditorTool.Select) return;
         ClearSelection();
-        if (Mode == SelectionMode.Vertex) SelectedVertices.UnionWith(Plan.Vertices.Where(v => CanSelectLevel(v.Level)).Select(v => v.Id));
-        else if (Mode == SelectionMode.Edge) SelectedEdges.UnionWith(Plan.Edges.Where(e => CanSelectLevel(VertexAt(e.A).Level)).Select(e => e.Id));
-        else SelectedFaces.UnionWith(faces.Where(f => CanSelectLevel(f.Level)).Select(f => f.Key));
+        if (Mode == SelectionMode.Vertex) SelectedVertices.UnionWith(Plan.Vertices.Where(v => CanSelectLevel(v.Level) && FocusIncludesVertex(v)).Select(v => v.Id));
+        else if (Mode == SelectionMode.Edge) SelectedEdges.UnionWith(Plan.Edges.Where(e => CanSelectLevel(VertexAt(e.A).Level) && FocusIncludesEdge(e)).Select(e => e.Id));
+        else SelectedFaces.UnionWith(faces.Where(f => CanSelectLevel(f.Level) && FocusIncludesFace(f)).Select(f => f.Key));
         SelectedAnnotations.UnionWith(Plan.Annotations.Where(CanSelectAnnotation).Select(a => a.Id));
         if(SelectedAnnotations.Count>0)Transform=TransformKind.Translation;
         ExpandGroups(); Host.UpdateInspector(); InvalidateVisual();
+        if (SelectionCount > 0) Host.PlayEditorSound(EditorSoundCue.Selection);
     }
+    private int SelectionCount => SelectedVertices.Count + SelectedEdges.Count + SelectedFaces.Count + SelectedAnnotations.Count;
     public void DeleteSelection()
     {
         var annotations = SelectedAnnotations.ToHashSet();
@@ -165,17 +206,19 @@ public partial class EditorCanvas : FrameworkElement
         Host.Mutate(() => { Plan.Annotations.RemoveAll(a => annotations.Contains(a.Id)); Plan.Edges.RemoveAll(e => edges.Contains(e.Id) || vertices.Contains(e.A) || vertices.Contains(e.B)); Plan.Vertices.RemoveAll(v => vertices.Contains(v.Id)); Plan.Normalize(); });
         ClearSelection(); Host.UpdateInspector();
     }
-    private Edge? HitEdge(V2 p) => Plan.Edges.Where(e => CanSelectLevel(VertexAt(e.A).Level) && Plan.Distance(p, VertexAt(e.A).P, VertexAt(e.B).P) <= 9 / Zoom).OrderBy(e => Plan.Distance(p, VertexAt(e.A).P, VertexAt(e.B).P)).FirstOrDefault();
-    private Vertex? HitVertex(V2 p) => Plan.Vertices.Where(v => CanSelectLevel(v.Level) && (p - v.P).Length <= 10 / Zoom).OrderBy(v => (p - v.P).Length).FirstOrDefault();
-    private Face? HitFace(V2 p) => faces.Where(f => CanSelectLevel(f.Level) && faceGeometry[f.Key].Bounds.Contains(new Point(p.X, -p.Y)) && Plan.Inside(p, f.Vertices.Select(id => VertexAt(id).P).ToList())).OrderBy(f => Math.Abs(f.Level - Plan.ActiveLevel)).ThenBy(f => f.Area).FirstOrDefault();
+    private Edge? HitEdge(V2 p) => Plan.Edges.Where(e => FocusIncludesEdge(e) && CanSelectLevel(VertexAt(e.A).Level) && Plan.Distance(p, VertexAt(e.A).P, VertexAt(e.B).P) <= 9 / Zoom).OrderBy(e => Plan.Distance(p, VertexAt(e.A).P, VertexAt(e.B).P)).FirstOrDefault();
+    private Vertex? HitVertex(V2 p) => Plan.Vertices.Where(v => FocusIncludesVertex(v) && CanSelectLevel(v.Level) && (p - v.P).Length <= 10 / Zoom).OrderBy(v => (p - v.P).Length).FirstOrDefault();
+    private Face? HitFace(V2 p) => faces.Where(f => FocusIncludesFace(f) && CanSelectLevel(f.Level) && faceGeometry[f.Key].Bounds.Contains(new Point(p.X, -p.Y)) &&
+        (IsSelectionFocused ? FillContains(f.Key, p) : Plan.Inside(p, f.Vertices.Select(id => VertexAt(id).P).ToList()))).OrderBy(f => Math.Abs(f.Level - Plan.ActiveLevel)).ThenBy(f => f.Area).FirstOrDefault();
     public bool HasSelectionOrGesture => SelectedAnnotations.Count > 0 || SelectedVertices.Count + SelectedEdges.Count + SelectedFaces.Count > 0 || Anchor != null || shapeStart != null || dragging || extruding || marquee;
     private static bool Shift => (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
     private static bool Ctrl => (Keyboard.Modifiers & ModifierKeys.Control) != 0;
     public void CancelGesture()
     {
+        SetPanning(false);
         if (IsColorSampling) CancelColorSampling();
-        if (before != null && (dragging || extruding)) Host.Document = Plan.Parse(before);
-        before = null; dragging = extruding = marquee = panning = shaping = false; Anchor = chainStart = shapeStart = null;
+        if (before != null && (dragging || extruding)) Host.Document = before.Value.Restore();
+        before = null; dragFeedback = null; dragging = extruding = marquee = shaping = false; Anchor = chainStart = shapeStart = null;
         ReleaseMouseCapture(); RefreshGeometry(); Host.UpdateInspector(); Host.UpdateStatus();
     }
     private Cursor ToolCursor => Tool == EditorTool.Select || Tool == EditorTool.None ? Cursors.Arrow : Cursors.Cross;
@@ -191,9 +234,16 @@ public partial class EditorCanvas : FrameworkElement
         if (IsColorSampling) { if (button == MouseButton.Left) SampleColorAt(PointToScreen(position)); else if (button == MouseButton.Right) CancelColorSampling(); return; }
         Focus(); downScreen = mouseScreen = position; downWorld = mouseWorld = World(downScreen); downCenter = Center; moved = false;
         if (button == MouseButton.Middle || button == MouseButton.Right || (button == MouseButton.Left && space))
-        { panning = true; CaptureMouse(); Cursor = Cursors.Hand; return; }
+        { SetPanning(true); CaptureMouse(); Cursor = Cursors.Hand; return; }
         if (button != MouseButton.Left) return;
+        if (Host.Rts?.HandleSceneClick(downWorld, position, ctrl) == true) return;
         if (Tool == EditorTool.None) return;
+        if (Tool == EditorTool.Mirror) { Host.PickMirrorAxis(downWorld.Snap(Plan.Grid)); return; }
+        if (Tool == EditorTool.Modifiers)
+        {
+            Host.PickBooleanOperand(downWorld, () => faces.FirstOrDefault(f => f.Level == Plan.ActiveLevel && FocusIncludesFace(f) && FillContains(f.Key, downWorld)));
+            return;
+        }
         if (clickCount < 2 && TryBeginScaleHandle()) return;
         if (AnnotationDown(downWorld, ctrl)) return;
         if (Tool == EditorTool.Shapes)
@@ -206,12 +256,20 @@ public partial class EditorCanvas : FrameworkElement
         {
             if (clickCount > 1) { Anchor = chainStart = null; InvalidateVisual(); return; }
             var p = downWorld.Snap(Plan.Grid);
-            if (Anchor == null) { Anchor = chainStart = p; }
+            if (Anchor == null)
+            {
+                Anchor = chainStart = p;
+                Host.PlayEditorSound(EditorSoundCue.Drawing);
+                if (Tool == EditorTool.Draw) PointFeedback(FeedbackCue.DrawPoint, p, Plan.ActiveLevel);
+            }
             else if ((p - Anchor.Value).Length > 1e-6)
             {
-                var start = Anchor.Value; var appearance = ActiveStroke; Host.Mutate(() => { int id = Plan.AddEdge(Plan.Point(start), Plan.Point(p), appearance.Color); var edge = Plan.Edges.First(e => e.Id == id); edge.Style = appearance.Style; edge.CopyArrows(appearance); Plan.Normalize(); });
+                var previous = Tool == EditorTool.Draw ? SnapshotFeedbackFaces() : null;
+                var start = Anchor.Value; var appearance = ActiveStroke; Host.Mutate(() => { int id = Plan.AddEdge(Plan.Point(start), Plan.Point(p), appearance.Color); var edge = Plan.Edges.First(e => e.Id == id); edge.Style = appearance.Style; edge.CopyArrows(appearance); Plan.Normalize(); }, createsFaces: Tool == EditorTool.Draw, createsObjects: Tool == EditorTool.Dimension);
                 if (Tool == EditorTool.Dimension || (chainStart != null && (p - chainStart.Value).Length < 1e-6)) Anchor = chainStart = null;
                 else Anchor = p;
+                Host.PlayEditorSound(EditorSoundCue.Drawing);
+                if (Tool == EditorTool.Draw && !ClosedDrawingFeedback(previous, start, p)) PointFeedback(FeedbackCue.DrawPoint, p, Plan.ActiveLevel);
             }
             InvalidateVisual(); Host.UpdateStatus(); return;
         }
@@ -254,7 +312,7 @@ public partial class EditorCanvas : FrameworkElement
         }
         if (hit && !ctrl)
         {
-            before = Plan.Serialize();
+            before = PlanSnapshot.Capture(Plan);
             if (shift && Mode == SelectionMode.Edge && !interior && Transform == TransformKind.Translation)
             {
                 extruding = true; extrusionDelta = new V2();
@@ -271,10 +329,15 @@ public partial class EditorCanvas : FrameworkElement
     {
         if (shapeStart == null) return;
         if (Shape == ShapeKind.Stairs) { FinishStair(end); return; }
-        var contour = Shapes.Contour(Shape, shapeStart.Value, end, CirclePoints, Plan.Grid);
+        var start = shapeStart.Value;
+        var shape = Shape;
+        var contour = Shapes.Contour(shape, start, end, CirclePoints, Plan.Grid);
         if (contour.Count < 3) return;
+        var previous = SnapshotFeedbackFaces();
         shapeStart = null; shaping = false; ReleaseMouseCapture();
-        Host.Mutate(() => Plan.Polygon(contour));
+        Host.Mutate(() => Plan.Polygon(contour), createsFaces: true);
+        Host.PlayEditorSound(EditorSoundCue.Drawing);
+        CompletedShapeFeedback(shape, previous, contour, start);
     }
     private void OnMove(object sender, MouseEventArgs e)
     {
@@ -285,9 +348,22 @@ public partial class EditorCanvas : FrameworkElement
         mouseScreen = position; mouseWorld = World(mouseScreen);
         if ((mouseScreen - downScreen).Length > 3) moved = true;
         if (!dragging && !panning) UpdateScaleCursor();
-        if (panning) { var d = mouseScreen - downScreen; Center = downCenter + new V2(-d.X / Zoom, d.Y / Zoom); }
-        else if (dragging && moved)
+        if (panning)
         {
+            var delta = mouseScreen - downScreen;
+            var center = downCenter + new V2(-delta.X / Zoom, delta.Y / Zoom);
+            if (Center == center) return;
+            Center = center;
+            if (!panFrameQueued)
+            {
+                panFrameQueued = true;
+                CompositionTarget.Rendering += DrawPanFrame;
+            }
+            return;
+        }
+        if (dragging && moved)
+        {
+            if (Tool == EditorTool.Select && Transform == TransformKind.Translation) dragFeedback ??= CaptureMoveFeedback();
             var delta = (mouseWorld - downWorld).Snap(Plan.Grid);
             if (Transform != TransformKind.Translation) UpdateTransformDrag(shift);
             else
@@ -314,50 +390,84 @@ public partial class EditorCanvas : FrameworkElement
         if (panning)
         {
             if (button == MouseButton.Right && !moved) { Anchor = chainStart = shapeStart = null; }
-            panning = false; ReleaseMouseCapture(); Cursor = ToolCursor; InvalidateVisual();
-            if (button == MouseButton.Right && !moved) OpenSelectionMenu(downWorld);
+            SetPanning(false); ReleaseMouseCapture(); Cursor = ToolCursor; InvalidateVisual();
+            if (moved) Host.UpdateStatus(World(mouseScreen).Snap(Plan.Grid));
+            if (button == MouseButton.Right && !moved && Host.Rts?.OpenScenePingMenu(downScreen) != true && Tool == EditorTool.Select) OpenSelectionMenu(downWorld);
             return;
         }
         if (button != MouseButton.Left) return;
+        if (Tool is EditorTool.Mirror or EditorTool.Modifiers) return;
         if (shaping)
         {
             shaping = false; ReleaseMouseCapture();
             if (moved) FinishShape(mouseWorld);
             InvalidateVisual(); return;
         }
+        if (extruding && moved && extrusionDelta.Length > 0)
+        {
+            extruding = false;
+            var previous = before;
+            before = null;
+            ReleaseMouseCapture();
+            ExtrudeSelection(extrusionDelta, previous, downWorld);
+            return;
+        }
         if (dragging || extruding)
         {
-            if (extruding && moved && extrusionDelta.Length > 0)
-            {
-                var next = Plan.Extrude(SelectedEdges.ToArray(), extrusionDelta); SelectedEdges.Clear(); SelectedEdges.UnionWith(next);
-            }
-            else if (dragging && moved && SelectedAnnotation == null && original.Any(pair => (VertexAt(pair.Key).P - pair.Value).Length > 1e-9)) NormalizeSelection();
+            bool movedSelection = dragFeedback != null && dragging && moved &&
+                (original.Any(pair => (VertexAt(pair.Key).P - pair.Value).Length > 1e-9) ||
+                    Plan.Annotations.Any(note => originalAnnotations.TryGetValue(note.Id, out var pose) && (note.Position - pose.Position).Length > 1e-9));
+            if (dragging && moved && SelectedAnnotation == null && original.Any(pair => (VertexAt(pair.Key).P - pair.Value).Length > 1e-9)) NormalizeSelection();
             dragging = extruding = false;
-            if (before != null) Host.Commit(before); before = null;
+            if (before != null) Host.Commit(before.Value); before = null;
+            if (movedSelection) FinishMoveFeedback(dragFeedback);
+            dragFeedback = null;
         }
         else if (marquee && moved)
         {
+            int previousCount = SelectionCount;
             var rect = new Rect(downScreen, mouseScreen);
             bool Contains(int id) => rect.Contains(Screen(VertexAt(id).P));
-            if (Mode == SelectionMode.Vertex) SelectedVertices.UnionWith(Plan.Vertices.Where(v => CanSelectLevel(v.Level) && Contains(v.Id)).Select(v => v.Id));
-            else if (Mode == SelectionMode.Edge) SelectedEdges.UnionWith(Plan.Edges.Where(e => CanSelectLevel(VertexAt(e.A).Level) && Contains(e.A) && Contains(e.B)).Select(e => e.Id));
-            else SelectedFaces.UnionWith(faces.Where(f => CanSelectLevel(f.Level) && f.Vertices.All(Contains)).Select(f => f.Key));
+            if (Mode == SelectionMode.Vertex) SelectedVertices.UnionWith(Plan.Vertices.Where(v => FocusIncludesVertex(v) && CanSelectLevel(v.Level) && Contains(v.Id)).Select(v => v.Id));
+            else if (Mode == SelectionMode.Edge) SelectedEdges.UnionWith(Plan.Edges.Where(e => FocusIncludesEdge(e) && CanSelectLevel(VertexAt(e.A).Level) && Contains(e.A) && Contains(e.B)).Select(e => e.Id));
+            else SelectedFaces.UnionWith(faces.Where(f => FocusIncludesFace(f) && CanSelectLevel(f.Level) && f.Vertices.All(Contains)).Select(f => f.Key));
             SelectedAnnotations.UnionWith(Plan.Annotations.Where(a => CanSelectAnnotation(a) && rect.Contains(AnnotationScreenBounds(a))).Select(a => a.Id));
             if (SelectedAnnotations.Count > 0) Transform = TransformKind.Translation;
             ExpandGroups();
+            if (SelectionCount > previousCount)
+            {
+                Host.PlayEditorSound(EditorSoundCue.Selection);
+                MarqueeFeedback(downWorld, mouseWorld);
+            }
         }
         marquee = false; ReleaseMouseCapture(); RefreshGeometry(); Host.UpdateInspector();
     }
     private void OnWheel(object sender, MouseWheelEventArgs e)
     {
-        var pos = e.GetPosition(this); var beforeZoom = World(pos);
-        Zoom = Math.Clamp(Zoom * Math.Pow(1.15, e.Delta / 120.0), .01, 20);
-        Center += beforeZoom - World(pos); Host.UpdateStatus(); InvalidateVisual(); e.Handled = true;
+        ZoomAt(e.GetPosition(this), e.Delta);
+        e.Handled = true;
+    }
+
+    internal void ZoomAt(Point position, int delta)
+    {
+        double next = Math.Clamp(Zoom * Math.Pow(1.15, delta / 120.0), .01, 20);
+        if (next == Zoom) return;
+        var anchored = World(position);
+        Zoom = next;
+        Center += anchored - World(position);
+        mouseWorld = World(mouseScreen);
+        if (GlPlan?.Active == true)
+        {
+            wheelPreview.Stop();
+            wheelPreview.Start();
+        }
+        Host.UpdateStatus();
+        InvalidateVisual();
     }
     public void Fit()
     {
-        var pts = Plan.Vertices.Where(v => v.Level == Plan.ActiveLevel || (v.Level < Plan.ActiveLevel ? ShowLowerLevels : ShowUpperLevels)).Select(v => v.P).Concat(Plan.AnnotationBounds(ShowLowerLevels)).ToList();
-        if (Plan.Background is { Visible: true } b) { pts.Add(new V2(b.X, b.Y)); pts.Add(new V2(b.X + b.Width, b.Y - b.Height)); }
+        var pts = IsSelectionFocused ? FocusPoints().ToList() : Plan.Vertices.Where(v => IsLevelVisible(v.Level)).Select(v => v.P).Concat(Plan.AnnotationBounds(ShowLowerLevels)).ToList();
+        if (!IsSelectionFocused && Plan.Background is { Visible: true } b) { pts.Add(new V2(b.X, b.Y)); pts.Add(new V2(b.X + b.Width, b.Y - b.Height)); }
         if (pts.Count == 0) { Center = new V2(); Zoom = 1; }
         else
         {
@@ -373,13 +483,14 @@ public partial class EditorCanvas : FrameworkElement
         if (!labels.TryGetValue(key, out var ft)) { ft = new FormattedText(text, L.Culture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), size, brush ?? Text, key.Item5); if (labels.Count > 2048) labels.Clear(); labels[key] = ft; }
         dc.DrawText(ft, point);
     }
-    private void DrawCachedScene(DrawingContext target)
+    internal OpenGlPlan GlPlan { get; }
+    private void PrepareScene(bool preview)
     {
         Edge? hover = !Exporting && Tool == EditorTool.Select && Mode == SelectionMode.Edge && Shift ? HitEdge(mouseWorld) : null;
-        var style = (Plan.ActiveLevel, ShowLowerLevels, ShowUpperLevels, ShowLengths, Zoom, ActualWidth, ActualHeight, Tool, Mode, Exporting, L.Language, VisualTreeHelper.GetDpi(this).PixelsPerDip, hover?.Id, SelectedAnnotation);
-        if (cachedScene == null || !Equals(cachedSceneStyle, style) || !sceneVertices.SetEquals(SelectedVertices) || !sceneEdges.SetEquals(SelectedEdges) || !sceneFaces.SetEquals(SelectedFaces) || !sceneAnnotations.SetEquals(SelectedAnnotations))
+        var style = (Plan.ActiveLevel, ShowLowerLevels, ShowUpperLevels, ShowLengths, ActualWidth, ActualHeight, Tool, Mode, Exporting, L.Language, VisualTreeHelper.GetDpi(this).PixelsPerDip, hover?.Id, SelectedAnnotation);
+        if (cachedScene == null || (!preview && sceneZoom != Zoom) || !Equals(cachedSceneStyle, style) || !sceneVertices.SetEquals(SelectedVertices) || !sceneEdges.SetEquals(SelectedEdges) || !sceneFaces.SetEquals(SelectedFaces) || !sceneAnnotations.SetEquals(SelectedAnnotations))
         {
-        navigationBrush = null; cachedScene = new DrawingGroup(); cachedSceneStyle = style; sceneCenter = Center;
+        navigationBrush = null; cachedScene = new DrawingGroup(); cachedSceneStyle = style; sceneCenter = Center; sceneZoom = Zoom;
         sceneVertices = SelectedVertices.ToHashSet(); sceneEdges = SelectedEdges.ToHashSet(); sceneFaces = SelectedFaces.ToHashSet(); sceneAnnotations = SelectedAnnotations.ToHashSet();
         using (var dc = cachedScene.Open())
         {
@@ -388,12 +499,13 @@ public partial class EditorCanvas : FrameworkElement
         foreach (int level in Plan.Levels.Where(l => l == Plan.ActiveLevel || (ShowLowerLevels && l < Plan.ActiveLevel)).Order())
         {
         dc.PushOpacity(Plan.LevelOpacity(level));
-        foreach (var face in facesByLevel.GetValueOrDefault(level, Array.Empty<Face>()))
+        foreach (var face in facesByLevel.GetValueOrDefault(level, Array.Empty<Face>()).Where(FocusIncludesFace))
         {
             if (Plan.Fills.TryGetValue(face.Key, out var color)) { dc.PushOpacity(Plan.FillOpacity(level)); DrawFace(dc, face, FaceBrush(face, color)); dc.Pop(); }
             if (!Exporting && SelectedFaces.Contains(face.Key)) { dc.PushOpacity(.24); DrawFace(dc, face, Accent, outline: true); dc.Pop(); }
         }
-        var levelEdges = edgesByLevel.GetValueOrDefault(level, Array.Empty<Edge>());
+        var allLevelEdges = edgesByLevel.GetValueOrDefault(level, Array.Empty<Edge>());
+        var levelEdges = IsSelectionFocused ? allLevelEdges.Where(FocusIncludesEdge).ToArray() : allLevelEdges;
         if (hover != null && VertexAt(hover.A).Level == level) dc.DrawLine(CachedPen("#426A62", 9), Screen(VertexAt(hover.A).P), Screen(VertexAt(hover.B).P));
         DrawEdgeBatch(dc, levelEdges, selectedPoints, hover?.Id);
         DrawArrows(dc, levelEdges);
@@ -408,29 +520,63 @@ public partial class EditorCanvas : FrameworkElement
                 dc.DrawRoundedRectangle(Brush("#181F2A"), null, new Rect(mid.X - 4, mid.Y - 2, length.Length * 7 + 8, 19), 3, 3); Label(dc, length, mid, 11, selected ? Accent : Text);
             }
         }
-        if (!Exporting) DrawVertexBatch(dc, verticesByLevel.GetValueOrDefault(level, Array.Empty<Vertex>()), selectedPoints);
+        if (!Exporting) DrawVertexBatch(dc, verticesByLevel.GetValueOrDefault(level, Array.Empty<Vertex>()).Where(FocusIncludesVertex), selectedPoints);
         DrawAnnotations(dc, level);
         dc.Pop();
         }
         if (ShowUpperLevels)
         {
-            DrawEdgeBatch(dc, Plan.Edges.Where(e => VertexAt(e.A).Level > Plan.ActiveLevel), selectedPoints, upper: true);
-            if (!Exporting) foreach (int id in selectedPoints.Where(id => VertexAt(id).Level > Plan.ActiveLevel)) dc.DrawEllipse(Accent, null, Screen(VertexAt(id).P), 4, 4);
+            DrawEdgeBatch(dc, Plan.Edges.Where(e => VertexAt(e.A).Level > Plan.ActiveLevel && FocusIncludesEdge(e)), selectedPoints, upper: true);
+            if (!Exporting) foreach (int id in selectedPoints.Where(id => VertexAt(id).Level > Plan.ActiveLevel && FocusIncludesVertex(VertexAt(id)))) dc.DrawEllipse(Accent, null, Screen(VertexAt(id).P), 4, 4);
         }
         }
         cachedScene.Freeze();
         }
-        DrawSceneForNavigation(target);
+
     }
     protected override void OnRender(DrawingContext dc)
     {
-        base.OnRender(dc); var bounds = new Rect(0, 0, ActualWidth, ActualHeight); dc.DrawRectangle(Brush("#181F2A"), null, bounds);
+        base.OnRender(dc);
+        if (Exporting) { DrawViewport(dc); return; }
+        using (var viewport = viewportDrawing.Open()) DrawViewport(viewport);
+        dc.DrawDrawing(viewportDrawing);
+    }
+
+    private void DrawPanFrame(object? sender, EventArgs args)
+    {
+        CancelPanFrame();
+        if (!panning || !IsLoaded || Exporting) return;
+        mouseWorld = World(mouseScreen);
+        using var viewport = viewportDrawing.Open();
+        DrawViewport(viewport);
+    }
+
+    private void CancelPanFrame()
+    {
+        if (!panFrameQueued) return;
+        panFrameQueued = false;
+        CompositionTarget.Rendering -= DrawPanFrame;
+    }
+
+    private void SetPanning(bool value)
+    {
+        if (panning == value) return;
+        panning = value;
+        if (!value) CancelPanFrame();
+        Host.SetMenuPanPaused(value);
+    }
+
+    internal void DrawViewport(DrawingContext dc, bool snapshot = false)
+    {
+        var bounds = new Rect(0, 0, ActualWidth, ActualHeight); bool gpu = !snapshot && !Exporting && GlPlan?.Active == true;
+        dc.DrawRectangle(gpu ? Brushes.Transparent : Brush("#181F2A"), null, bounds);
         if (ActualWidth < 1 || ActualHeight < 1) return;
-        if (reference != null && Plan.Background is { Visible: true } bg)
+        if (!Exporting) Host.Rts?.ObserveCamera();
+        if (!gpu && !IsSelectionFocused && reference != null && Plan.Background is { Visible: true } bg)
         { dc.PushOpacity(bg.Opacity); dc.DrawImage(reference, new Rect(Screen(new V2(bg.X, bg.Y)), new Size(bg.Width * Zoom, bg.Height * Zoom))); dc.Pop(); }
         var lo = World(new Point(0, ActualHeight)); var hi = World(new Point(ActualWidth, 0));
         double visibleStep = Plan.Grid; while (visibleStep * Zoom < 10) visibleStep *= 2;
-        if (ShowGrid)
+        if (!gpu && ShowGrid)
         {
             for (double x = Math.Ceiling(lo.X / visibleStep) * visibleStep; x <= hi.X; x += visibleStep)
             { double sx = Math.Round(Screen(new V2(x, 0)).X) + .5; dc.DrawLine(new Pen(Math.Abs(x % (visibleStep * 8)) < .01 ? GridMajor : GridMinor, 1), new Point(sx, 0), new Point(sx, ActualHeight)); }
@@ -440,9 +586,19 @@ public partial class EditorCanvas : FrameworkElement
             dc.DrawLine(new Pen(Brush("#41564F"), 1), new Point(origin.X, 0), new Point(origin.X, ActualHeight));
             dc.DrawLine(new Pen(Brush("#5C4548"), 1), new Point(0, origin.Y), new Point(ActualWidth, origin.Y));
         }
-        DrawCachedScene(dc);
+        PrepareScene(gpu && wheelPreview.IsEnabled);
+        if (gpu)
+        {
+            var image = Plan.Background;
+            bool show = !IsSelectionFocused && reference != null && image?.Visible == true;
+            var area = show ? new Rect(Screen(new V2(image!.X, image.Y)), new Size(image.Width * Zoom, image.Height * Zoom)) : Rect.Empty;
+            GlPlan!.Present(new(cachedScene!, sceneCenter, sceneZoom, Center, Zoom, RenderSize, ShowGrid, visibleStep,
+                show ? reference : null, area, image?.Opacity ?? 1));
+        }
+        else DrawSceneForNavigation(dc);
         if (!Exporting)
         {
+            Host.DrawGeometryToolGuide(dc, mouseWorld);
             if (Tool == EditorTool.Shapes && Shape != ShapeKind.Stairs && shapeStart != null)
             {
                 var contour = Shapes.Contour(Shape, shapeStart.Value, mouseWorld, CirclePoints, Plan.Grid);

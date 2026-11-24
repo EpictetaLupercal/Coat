@@ -71,7 +71,7 @@ public partial class MainWindow
         return fragment;
     }
     private static Annotation CloneNote(Annotation note, int id, V2 offset, int level) => new()
-    { Id = id, X = note.X + offset.X, Y = note.Y + offset.Y, Text = note.Text, Size = note.Size, Rotation = note.Rotation, Color = note.Color, Level = level, IsToken = note.IsToken, TokenShape = note.TokenShape };
+    { Id = id, X = note.X + offset.X, Y = note.Y + offset.Y, Text = note.Text, Size = note.Size, Rotation = note.Rotation, Color = note.Color, Level = level, IsToken = note.IsToken, TokenShape = note.TokenShape, Ping = note.Ping };
     private static void CopyFaceStyles(Plan source, Plan target, IReadOnlyDictionary<int, int> map, HashSet<int> edges)
     {
         foreach (var face in source.Faces().Where(f => source.FaceEdges(f).IsSubsetOf(edges) && f.Vertices.All(map.ContainsKey)))
@@ -140,7 +140,7 @@ public partial class MainWindow
                 var pasted = CloneNote(note, Document.NextId++, offset, Document.ActiveLevel + note.Level - fragment.ActiveLevel); Document.EnsureLevel(pasted.Level); Document.Annotations.Add(pasted); Canvas.SelectedAnnotations.Add(pasted.Id);
             }
             Canvas.RefreshGeometry(); Canvas.ExpandGroups();
-        });
+        }, createsObjects: true);
         lastPastedData = data; lastPasteDocument = Document; lastPasteCenter = center; lastPasteLevel = Document.ActiveLevel; pasteCount = repeat;
         Canvas.Focus(); Notify(L.T("Sélection collée sur le niveau ") + Document.ActiveLevel + L.T(". Glissez pour la placer."));
     }
