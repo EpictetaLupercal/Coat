@@ -1,6 +1,7 @@
 // Coat — Epicteta Lupercal
 using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
 using System.Windows.Automation;
@@ -29,7 +30,10 @@ public partial class Plan
 
 public enum MapSurface { Empty, Wall, Floor }
 public record MapBrush(int Level, double Bottom, double Top, List<V2> Outline, MapSurface Surface = MapSurface.Wall, string Color = "#FFFFFF");
-public sealed record MapExportResult(string Text, int BrushCount);
+public sealed record MapExportResult(string Text, int BrushCount)
+{
+    internal string GeometryFingerprint { get; init; } = "";
+}
 public static partial class MapExporter
 {
     public const double FloorThickness = 16;
@@ -157,7 +161,14 @@ public static partial class MapExporter
             }
             text.AppendLine("}");
         }
-        text.AppendLine("}"); return new(text.ToString(), brushes.Count);
+        text.AppendLine("}");
+        // Sort brushes and their footprint points so order, material comments and file names do not affect the comparison.
+        var footprints = brushes.Select(b => string.Join("|", F(b.Bottom), F(b.Top),
+            string.Join(";", b.Outline.Select(p => F(p.X) + "," + F(p.Y)).Order(StringComparer.Ordinal)))).Order(StringComparer.Ordinal);
+        return new(text.ToString(), brushes.Count)
+        {
+            GeometryFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", footprints))))
+        };
     }
 }
 
@@ -209,7 +220,7 @@ public partial class MainWindow
             var result = MapExporter.Export(Document);
             var dialog = new SaveFileDialog { Filter = L.T("Carte .map (*.map)|*.map"), DefaultExt = ".map", FileName = string.IsNullOrEmpty(file) ? "Plan.map" : Path.GetFileNameWithoutExtension(file) + ".map" };
             if (dialog.ShowDialog(this) != true) return;
-            WriteAtomic(dialog.FileName, result.Text); Notify(L.F($"Carte .map exportée : {result.BrushCount} brushes de murs et de sols."));
+            WriteProjectMap(dialog.FileName, result);
         }
         catch (Exception ex) { Error(L.T("Impossible d’exporter la carte .map"), ex); }
     }

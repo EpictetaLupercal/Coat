@@ -54,7 +54,8 @@ internal static class L
         {
             Key.Escape => T("Échap"), Key.Delete => T("Suppr"), Key.Back => T("Retour arrière"), Key.Return => T("Entrée"),
             Key.Home => T("Origine"), Key.End => T("Fin"), Key.Space => T("Espace"), Key.PageUp => "Page Up", Key.PageDown => "Page Down",
-            Key.Left => T("Gauche"), Key.Right => T("Droite"), Key.Up => T("Haut"), Key.Down => T("Bas"), Key.OemComma => ",", _ => key.ToString()
+            Key.Left => T("Gauche"), Key.Right => T("Droite"), Key.Up => T("Haut"), Key.Down => T("Bas"), Key.OemComma => ",",
+            Key.Oem2 => "/", Key.Divide => T("Pavé ") + "/", _ => key.ToString()
         };
     }
 }

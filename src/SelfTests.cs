@@ -201,7 +201,7 @@ public static class SelfTests
         foreach (var tool in new[] { EditorTool.Select, EditorTool.Draw, EditorTool.Erase, EditorTool.Paint })
         {
             window.SetTool(tool); window.UpdateLayout(); Pump(); text = Texts((DependencyObject)window.Content);
-            check(text.Contains("NIVEAUX") && !text.Contains("OUTIL ACTIF") && !text.Contains("IMAGE DE RÉFÉRENCE") && !text.Contains("REPÈRES") && !text.Contains("DOCUMENT"), $"Inspector for {tool} shows only levels and tool properties");
+            check(!text.Contains("NIVEAUX") && !text.Contains("IMAGE DE RÉFÉRENCE") && !text.Contains("REPÈRES") && !text.Contains("DOCUMENT"), $"Inspector for {tool} leaves plan settings on the Plan tab");
         }
         window.SetTool(EditorTool.Draw); Click(new(0, 0)); KeyPress(Key.Escape);
         check(canvas.Tool == EditorTool.Select && canvas.Anchor == null, "Escape cancels a pending point and returns to Select");

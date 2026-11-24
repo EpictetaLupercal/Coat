@@ -73,6 +73,7 @@ public partial class MainWindow
         EditorTool.Shapes => ("M3,4 H15 V16 H3 Z M16,9 A6,6 0 1 1 10,17","Tracez un rectangle, un cercle ou un escalier."),
         EditorTool.Annotation => ("M3,7 V3 H21 V7 M12,3 V21 M7,21 H17","Placez ou modifiez une annotation sur le plan."),
         EditorTool.Token => ("M12,2 A10,10 0 1 1 11.99,2 Z M12,6 L14,10 L19,11 L15,14 L16,18 L12,16 L8,18 L9,14 L5,11 L10,10 Z","Choisissez un symbole et placez un jeton sur le plan."),
+        EditorTool.Mirror => ("M3,18 V7 L9,18 Z M21,18 V7 L15,18 Z M12,3 V7 M12,10 V14 M12,17 V21","Retournez la sélection autour d’un axe horizontal ou vertical."),
         _ => throw new ArgumentOutOfRangeException(nameof(tool))
     };
 
@@ -120,6 +121,7 @@ public partial class MainWindow
     {
         ("Appliquer les coordonnées",CheckGlyph), ("Appliquer la hauteur",CheckGlyph),
         ("Appliquer la rotation",CheckGlyph), ("Appliquer l’échelle",CheckGlyph),
+        ("Appliquer le miroir",CheckGlyph), ("Appliquer le booléen",CheckGlyph),
         ("Appliquer la cote",CheckGlyph), ("Appliquer le texte",CheckGlyph),
         ("Appliquer le jeton",CheckGlyph), ("Appliquer le dégradé",CheckGlyph),
         ("Appliquer à l’image",CheckGlyph), ("Utiliser les réglages du jeton",CheckGlyph),

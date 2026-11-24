@@ -27,7 +27,7 @@ internal static class InternationalTests
             foreach (string culture in new[] { "en-US", "de-DE", "ja-JP", "ar-EG" })
             {
                 CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
-                window.ChangeLanguage("en"); window.LoadDocument(Plan.Parse(json), ""); window.SetTool(EditorTool.Select); window.UpdateLayout(); Pump();
+                window.ChangeLanguage("en"); window.LoadDocument(Plan.Parse(json), ""); window.ShowPlanInspector(); window.UpdateLayout(); Pump();
                 check(window.Title.Contains("Untitled") && Desc<Menu>(window).Single().Items.OfType<MenuItem>().First().Header as string == "File", $"English UI remains English with {culture} numeric settings");
                 check(window.Document.Serialize() == json && window.Document.Annotations.Single().Text == note, $"Fractional coordinates and Unicode project content round-trip under {culture}");
                 var exported = XDocument.Parse(MainWindow.Svg(window.Document));

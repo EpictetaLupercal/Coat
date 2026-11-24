@@ -20,13 +20,17 @@ public partial class MainWindow : Window
     private StackPanel inspector = new();
     private StackPanel levelsPanel = new() { Margin = new Thickness(12, 9, 12, 0) };
     private TextBlock statusLeft = new(), statusRight = new();
+    private readonly PresentationMonitor presentationMonitor = new();
     private readonly Dictionary<EditorTool, Button> toolButtons = new();
     private ComboBox gridChoice = new();
     private readonly int[] steps = { 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 };
-    private string saved = "", file = "";
+    private PlanSnapshot saved;
+    private string file = "";
     private string moveXText = "0", moveYText = "0";
+    private (long Length, DateTime Written)? openFileVersion;
     private bool updating;
     private bool compactLevels;
+    private MenuDecoration? topDecoration, inspectorDecoration;
     private double inspectorWidth = 276;
     private readonly CommandHints hints;
     public bool TestMode { get; set; }
@@ -39,26 +43,36 @@ public partial class MainWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterScreen; Background = B("#141B25"); Foreground = B("#DCE4ED"); FontFamily = new FontFamily("Segoe UI"); FontSize = 13;
         SetTheme(); Icon = OfficialLogo; Canvas = new EditorCanvas(this); Language = XmlLanguage.GetLanguage(L.Culture.Name);
         BuildInterface();
-        saved = Document.Serialize(); Canvas.RefreshGeometry(); UpdateInspector(); UpdateToolButtons(); UpdateStatus();
+        saved = PlanSnapshot.Capture(Document); Canvas.RefreshGeometry(); UpdateInspector(); UpdateToolButtons(); UpdateStatus();
         hints.Listen(this,this); PreviewKeyDown += OnKey; PreviewKeyUp += (_, _) => Canvas.InvalidateVisual();
+        PreviewTextInput += OnFocusTextInput;
         Closing += (_, e) => { Canvas.CancelGesture(); if (!TestMode && !CheckSave()) e.Cancel = true; };
-        Loaded += (_, _) => Canvas.Focus();
-        SizeChanged += (_, _) => { bool compact = ActualHeight < 760; if (compact != compactLevels) { compactLevels = compact; UpdateLevels(); } };
+        Closed += (_, _) => { Canvas.GlPlan.Close(); presentationMonitor.Dispose(); editorSounds.Dispose(); };
+        Loaded += (_, _) => { if (!TestMode) presentationMonitor.Start(); Canvas.Focus(); };
+        SizeChanged += (_, _) => { bool compact = ActualHeight < 760; if (compact != compactLevels) { compactLevels = compact; if (inspectorPage == InspectorPage.Plan) UpdateLevels(); } };
     }
     private void BuildInterface()
     {
+        if (VisualTreeHelper.GetParent(Canvas.GlPlan) is Panel glParent) glParent.Children.Remove(Canvas.GlPlan);
         if (VisualTreeHelper.GetParent(Canvas) is Panel parent) parent.Children.Remove(Canvas);
-        inspector = new(); levelsPanel = new() { Margin = new Thickness(12, 9, 12, 0) };
+        if (VisualTreeHelper.GetParent(Canvas.Feedback) is Panel feedbackParent) feedbackParent.Children.Remove(Canvas.Feedback);
+        inspector = new(); levelsPanel = new() { Margin = new Thickness(0, 0, 0, 10) };
         statusLeft = new(); statusRight = new(); gridChoice = new(); toolButtons.Clear(); shortcutMenus.Clear(); menuCommands.Clear(); featureMenus.Clear();
-        var root = new Grid { Background = B("#141B25") }; root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(38) }); root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(48) }); root.RowDefinitions.Add(new RowDefinition()); root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) }); Content = root; hints.Install(root);
+        var root = new Grid { Background = B("#141B25") };
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(38) });
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(48) });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition());
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) });
+        Content = root; hints.Install(root);
         var toolbarBorder = new Border { Background = B("#1B2430"), BorderBrush = B("#2B3645"), BorderThickness = new Thickness(0, 1, 0, 1) };
         Grid.SetRow(toolbarBorder, 1);
         root.Children.Add(toolbarBorder);
-        if (Shortcuts.AnimatedMenus)
+        topDecoration = Shortcuts.AnimatedMenus ? new MenuDecoration(MenuSurface.Top, IsBordeaux) : null;
+        if (topDecoration != null)
         {
-            var circuit = new MenuDecoration(MenuSurface.Top, IsBordeaux);
-            Grid.SetRowSpan(circuit, 2);
-            root.Children.Add(circuit);
+            Grid.SetRowSpan(topDecoration, 2);
+            root.Children.Add(topDecoration);
         }
         var header = new DockPanel { LastChildFill = false, Margin = new Thickness(14, 0, 16, 0) };
         var brand = new Image
@@ -75,6 +89,13 @@ public partial class MainWindow : Window
         Add(em, L.T("Copier"), "Ctrl+C", () => CopySelection()); Add(em, L.T("Couper"), "Ctrl+X", CutSelection); Add(em, L.T("Coller"), "Ctrl+V", PasteSelection);
         Add(em, L.T("Préférences…"), "Ctrl+OemComma", ShowPreferences);
         var vm = Menu(L.T("Affichage")); Add(vm, L.T("Cadrer le plan"), L.T("Origine"), Canvas.Fit); Add(vm, L.T("Revenir à l’origine"), "", () => { Canvas.Center = new(); Canvas.Zoom = 1; Canvas.InvalidateVisual(); UpdateStatus(); }); Add(vm, L.T("Afficher / masquer la grille"), "G", () => { Canvas.ShowGrid = !Canvas.ShowGrid; Canvas.InvalidateVisual(); }); Add(vm, L.T("Afficher / masquer les longueurs"), "M", () => { Canvas.ShowLengths = !Canvas.ShowLengths; Canvas.InvalidateVisual(); }); Add(vm, L.T("Afficher les niveaux supérieurs"), "H", ToggleUpperLevels); upperLevelsMenu = (MenuItem)vm.Items[vm.Items.Count - 1]; upperLevelsMenu.IsCheckable = true; Add(vm, L.T("Afficher les niveaux inférieurs"), "Shift+H", ToggleLowerLevels); lowerLevelsMenu = (MenuItem)vm.Items[vm.Items.Count - 1]; lowerLevelsMenu.IsCheckable = true; lowerLevelsMenu.IsChecked = Canvas.ShowLowerLevels; Add(vm, L.T("Organisation"), "", ShowOrganization); menu.Items.Add(vm);
+        var options = Menu(L.T("Options"));
+        Add(vm, L.T(ShortcutSettings.FocusAction), "", Canvas.ToggleSelectionFocus);
+        focusMenu = (MenuItem)vm.Items[^1];
+        focusMenu.IsCheckable = true;
+        Add(options, L.T("Vue 3D"), "", Open3DView);
+        Add(options, L.T("Sons de l’éditeur"), "", ShowSoundPreferences);
+        menu.Items.Add(options);
         menu.Items.Add(BuildPluginsMenu());
         var hm = Menu(L.T("Aide")); Add(hm, L.T("Raccourcis et prise en main"), "F1", Help); Add(hm, L.T("À propos de Coat"), "", () => AppDialog.Show(this, AppVersion.Title + "\n\nEpicteta Lupercal\n\n" + L.T("Éditeur de plans et blueprints pour level design."), L.T("À propos de Coat"), MessageBoxButton.OK, MessageBoxImage.Information)); menu.Items.Add(hm); header.Children.Add(menu);
         var version = new TextBlock { Text = "EPICTETA LUPERCAL  /  " + AppVersion.Number, FontSize = 10, Foreground = B("#728196"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right }; DockPanel.SetDock(version, Dock.Right); header.Children.Add(version);
@@ -82,8 +103,15 @@ public partial class MainWindow : Window
         var toolbar = new DockPanel { Margin = new Thickness(12, 5, 12, 5), LastChildFill = false };
         Grid.SetRow(toolbar, 1);
         root.Children.Add(toolbar);
-        AddTool(toolbar, EditorTool.Select, L.T("Sélection")); AddTool(toolbar, EditorTool.Draw, L.T("Dessin")); AddTool(toolbar, EditorTool.Dimension, L.T("Cotation")); AddTool(toolbar, EditorTool.Erase, L.T("Gomme")); AddTool(toolbar, EditorTool.Paint, L.T("Couleur"));
+        var contextBar = CreateContextBar();
+        Grid.SetRow(contextBar, 2);
+        root.Children.Add(contextBar);
+        AddTool(toolbar, EditorTool.Select, L.T("Sélection"));
+        AddTool(toolbar, EditorTool.Mirror, L.T("Miroir"));
+        AddToolbarDivider(toolbar);
+        AddTool(toolbar, EditorTool.Draw, L.T("Dessin")); AddTool(toolbar, EditorTool.Dimension, L.T("Cotation")); AddTool(toolbar, EditorTool.Erase, L.T("Gomme")); AddTool(toolbar, EditorTool.Paint, L.T("Couleur"));
         AddTool(toolbar, EditorTool.Shapes, L.T("Shapes"));
+        AddToolbarDivider(toolbar);
         AddTool(toolbar, EditorTool.Annotation, L.T("Texte"));
         AddTool(toolbar, EditorTool.Token, L.T("Jetons"));
         toolbar.Children.Add(new Border { Background = B("#354151"), Width = 1, Margin = new Thickness(12, 5, 14, 5) });
@@ -100,9 +128,13 @@ public partial class MainWindow : Window
         body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
         var inspectorColumn = new ColumnDefinition { Width = new GridLength(inspectorWidth), MinWidth = 264, MaxWidth = 540 };
         body.ColumnDefinitions.Add(inspectorColumn);
-        Grid.SetRow(body, 2);
+        Grid.SetRow(body, 3);
         root.Children.Add(body);
+        body.Children.Add(Canvas.GlPlan);
         body.Children.Add(Canvas);
+        body.Children.Add(Canvas.Feedback);
+        rts = new RtsHud(this, rts?.IsMapCollapsed == true);
+        body.Children.Add(rts);
         var splitter = new GridSplitter
         {
             Width = 8, HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -118,21 +150,35 @@ public partial class MainWindow : Window
         Grid.SetColumn(sidebar, 2);
         body.Children.Add(sidebar);
         var sideLayout = new DockPanel();
-        sidebar.Child = Shortcuts.AnimatedMenus
-            ? new Grid { Children = { new MenuDecoration(MenuSurface.Inspector, IsBordeaux), sideLayout } }
+        inspectorDecoration = Shortcuts.AnimatedMenus ? new MenuDecoration(MenuSurface.Inspector, IsBordeaux) : null;
+        sidebar.Child = inspectorDecoration != null
+            ? new Grid { Children = { inspectorDecoration, sideLayout } }
             : sideLayout;
-        DockPanel.SetDock(levelsPanel, Dock.Top); sideLayout.Children.Add(levelsPanel);
-        sideLayout.Children.Add(new ScrollViewer { Content = inspector, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        AddInspectorTabs(sideLayout);
         inspector.Margin = new Thickness(12, 9, 12, 12);
         var status = new DockPanel { Margin = new Thickness(14, 0, 14, 0) };
         statusLeft.FontSize = statusRight.FontSize = 11; statusLeft.Foreground = statusRight.Foreground = B("#9BA9BA"); statusLeft.VerticalAlignment = statusRight.VerticalAlignment = VerticalAlignment.Center;
-        statusRight.HorizontalAlignment = HorizontalAlignment.Right; DockPanel.SetDock(statusRight, Dock.Right); status.Children.Add(statusRight); status.Children.Add(statusLeft); Grid.SetRow(status, 3); root.Children.Add(status);
+        var fps = new PresentedFps(presentationMonitor)
+        {
+            FontSize = 11, Foreground = statusRight.Foreground, VerticalAlignment = VerticalAlignment.Center,
+            Width = 52, Margin = new Thickness(12, 0, 0, 0), TextAlignment = TextAlignment.Right
+        };
+        DockPanel.SetDock(fps, Dock.Right);
+        status.Children.Add(fps);
+        statusRight.HorizontalAlignment = HorizontalAlignment.Right; DockPanel.SetDock(statusRight, Dock.Right); status.Children.Add(statusRight); status.Children.Add(statusLeft); Grid.SetRow(status, 4); root.Children.Add(status);
 
+    }
+
+    internal void SetMenuPanPaused(bool paused)
+    {
+        topDecoration?.PauseForPan(paused);
+        inspectorDecoration?.PauseForPan(paused);
     }
     internal void ChangeLanguage(string language)
     {
         Canvas.CancelGesture(); L.SetLanguage(language); SetTheme(); Background=B("#141B25"); Foreground=B("#DCE4ED");
         Language = System.Windows.Markup.XmlLanguage.GetLanguage(L.Culture.Name);
+        if (view3DWindow != null) view3DWindow.Title = L.T("Vue 3D");
         BuildInterface();
         updating = true; gridChoice.SelectedIndex = Array.IndexOf(steps, Document.Grid); updating = false;
         if (upperLevelsMenu != null) upperLevelsMenu.IsChecked = Canvas.ShowUpperLevels;
@@ -229,6 +275,7 @@ public partial class MainWindow : Window
             EditorTool.Annotation => "Annotations",
             EditorTool.Dimension => "Cote",
             EditorTool.Token => "Jeton",
+            EditorTool.Mirror => "Miroir",
             _ => throw new ArgumentOutOfRangeException(nameof(tool))
         };
         var button = Button("", () => SetTool(Canvas.Tool == tool ? EditorTool.None : tool), shortcutId);
@@ -237,7 +284,8 @@ public partial class MainWindow : Window
         toolButtons[tool] = button;
         bar.Children.Add(button);
     }
-    public void SetTool(EditorTool tool) { Canvas.SetTool(tool); UpdateToolButtons(); UpdateStatus(); Canvas.Focus(); }
+    public void SetTool(EditorTool tool) => ActivateTool(tool,
+        tool == EditorTool.None ? InspectorPage.Plan : tool == EditorTool.Modifiers ? InspectorPage.Modifiers : InspectorPage.Selection);
     private void UpdateToolButtons()
     {
         foreach (var (tool,button) in toolButtons)
@@ -300,20 +348,28 @@ public partial class MainWindow : Window
     }
     public void UpdateInspector()
     {
-        CloseColorPicker(false); confirmations.Clear(); inspectorCommands.Clear(); UpdateLevels(); inspector.Children.Clear(); inspectorHints.Clear(); inspectorHelp = null;
-        if (Canvas.Tool != EditorTool.None)
+        CloseColorPicker(false); confirmations.Clear(); inspectorCommands.Clear(); inspector.Children.Clear(); inspectorHints.Clear(); inspectorHelp = null;
+        UpdateContextBar();
+        rts?.RefreshCommands();
+        foreach (var (page, button) in inspectorTabs) SetActive(button, inspectorPage == page);
+        foreach (var (mode, button) in selectionModeButtons)
         {
-        string[] names = { L.T("Sélection"), L.T("Dessin de contours"), L.T("Gomme"), L.T("Coloriage"), "", L.T("Shapes"), L.T("Annotations"), L.T("Cotation"), L.T("Jetons") };
+            bool active = Canvas.Tool == EditorTool.Select && Canvas.Mode == mode;
+            SetActive(button, active);
+            button.Background = ToolbarSurface(active ? "#304E48" : "#263241");
+        }
+        if (inspectorPage == InspectorPage.Modifiers) { BooleanInspector(); UpdateTitle(); return; }
+        if (inspectorPage == InspectorPage.Selection)
+        {
+        string[] names = { L.T("Sélection"), L.T("Dessin de contours"), L.T("Gomme"), L.T("Coloriage"), "", L.T("Shapes"), L.T("Annotations"), L.T("Cotation"), L.T("Jetons"), L.T("Miroir") };
         InspectorTitle(names[(int)Canvas.Tool]);
         if (Canvas.Tool == EditorTool.Select)
         {
-            ModeButtons(new[] { L.T("•  Points"), L.T("╱  Arêtes"), L.T("▱  Zones") }, (int)Canvas.Mode, i => { Canvas.CancelGesture(); Canvas.ClearSelection(); Canvas.Mode = (SelectionMode)i; UpdateInspector(); Canvas.InvalidateVisual(); Canvas.Focus(); },
-                new[] { "Sélection de points", "Sélection d’arêtes", "Sélection de zones" });
             var across = new CheckBox { Content = L.T("Sélection sur plusieurs niveaux"), IsChecked = Canvas.SelectAcrossLevels }; across.Click += (_, _) => { Canvas.SelectAcrossLevels = across.IsChecked == true; Canvas.ClearSelection(); Canvas.InvalidateVisual(); }; inspector.Children.Add(across);
             var dimensionEdges = Canvas.SelectionEdges();
             var dimensions = Document.Edges.Where(e => dimensionEdges.Contains(e.Id) && e.Dimension).ToList();
             if (dimensions.Count > 0) DimensionControls(dimensions, false);
-            TransformInspector();
+            TransformDetails();
             if (Canvas.Transform == TransformKind.Translation)
                 ToolHint(Canvas.Mode == SelectionMode.Edge ? L.T("Glissez une arête ou l’intérieur d’une forme entièrement sélectionnée pour la déplacer. Maintenez Maj et glissez pour extruder une épaisseur.") : Canvas.Mode == SelectionMode.Vertex ? L.T("Glissez un point ou saisissez ses coordonnées. Une forme entièrement sélectionnée se déplace aussi depuis son intérieur.") : L.T("Cliquez à l’intérieur d’un contour fermé pour sélectionner toute sa zone."));
             ToolHint(L.T("Ctrl + clic : sélection multiple. Glissez dans le vide pour sélectionner par rectangle."));
@@ -356,6 +412,7 @@ public partial class MainWindow : Window
                 }
             }, initiallyOpen: true);
         }
+        else if (Canvas.Tool == EditorTool.Mirror) MirrorInspector();
         else if (Canvas.Tool == EditorTool.Dimension) DimensionInspector();
         else if (Canvas.Tool is EditorTool.Annotation or EditorTool.Token) AnnotationInspector();
         else if (Canvas.Tool == EditorTool.Draw)
@@ -367,17 +424,10 @@ public partial class MainWindow : Window
         }
         else if (Canvas.Tool == EditorTool.Shapes)
         {
-            ModeButtons(new[] { "Rectangle", L.T("Cercle"), L.T("Escaliers") }, (int)Canvas.Shape, i => { Canvas.CancelGesture(); Canvas.Shape = (ShapeKind)i; UpdateInspector(); Canvas.Focus(); });
             if (Canvas.Shape == ShapeKind.Stairs) StairInspector();
             else ToolHint(Canvas.Shape == ShapeKind.Rectangle ? L.T("Placez deux coins opposés, ou cliquez-glissez pour créer un rectangle de quatre points.") : L.T("Placez le centre, puis le rayon, ou cliquez-glissez. Le contour est un polygone régulier."));
             if (Canvas.Shape == ShapeKind.Circle)
-            {
-                var count = Field(L.T("Points"), Canvas.CirclePoints.ToString(CultureInfo.InvariantCulture));
-                count.TextChanged += (_, _) => { if (int.TryParse(count.Text, out int n) && n >= 3 && n <= 128) { Canvas.CirclePoints = n; Canvas.InvalidateVisual(); } };
-                count.LostKeyboardFocus += (_, _) => { if (!int.TryParse(count.Text, out int n) || n < 3 || n > 128) { count.Text = Canvas.CirclePoints.ToString(CultureInfo.InvariantCulture); Notify(L.T("Le cercle doit avoir entre 3 et 128 points.")); } };
-                AddStepper(count, L.T("Points"), 3, 128, () => Canvas.CirclePoints, integer: true);
                 ToolHint(L.T("De 3 à 128 points. Le centre et le rayon suivent la grille ; les sommets conservent un cercle régulier."));
-            }
             ToolHint(L.T("Échap annule la forme en cours. Une forme complète s’annule en une seule étape avec Ctrl+Z."));
         }
         else if (Canvas.Tool == EditorTool.Erase) ToolHint(L.T("Cliquez sur une arête pour la supprimer, ou à l’intérieur d’une zone pour effacer son remplissage. Ctrl+Z annule l’opération."));
@@ -398,6 +448,8 @@ public partial class MainWindow : Window
         }
         UpdateTitle(); return;
         }
+        UpdateLevels();
+        inspector.Children.Add(levelsPanel);
         InspectorTitle(L.T("IMAGE DE RÉFÉRENCE"));
         if (Document.Background is { } bg)
         {
@@ -418,7 +470,15 @@ public partial class MainWindow : Window
     {
         levelsPanel.Children.Clear();
         levelsPanel.Children.Add(new TextBlock { Text = L.T("NIVEAUX"), FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = B("#8596AB"), Margin = new Thickness(0, 0, 0, 10) });
-        levelsPanel.Children.Add(new LevelPreview(Document.Levels, Document.ActiveLevel) { Height = compactLevels || Canvas.Tool == EditorTool.Select ? 78 : 102 });
+        var preview = new Expander
+        {
+            Header = L.T("Aperçu des niveaux"), Foreground = B("#DCE4ED"),
+            IsExpanded = openSections.GetValueOrDefault("level-preview", true),
+            Content = new LevelPreview(Document.Levels, Document.ActiveLevel) { Height = compactLevels || Canvas.Tool == EditorTool.Select ? 78 : 102 }
+        };
+        preview.Expanded += (_, _) => openSections["level-preview"] = true;
+        preview.Collapsed += (_, _) => openSections["level-preview"] = false;
+        levelsPanel.Children.Add(preview);
         var row = new Grid { Margin = new Thickness(0, 10, 0, 0) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) }); row.ColumnDefinitions.Add(new ColumnDefinition()); for (int i=0; i<3; i++) row.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(32)});
         var down = Button(L.T("Un niveau plus bas"), () => ChangeAdjacentLevel(-1), "Niveau inférieur"); down.Margin = new Thickness(0); down.IsEnabled = Document.ActiveLevel > -999; down.ToolTip = L.T("Passer au niveau inférieur (créé si nécessaire) · Page ↓"); SetHint(down,L.T("Un niveau plus bas"),L.T("Passer au niveau inférieur (créé si nécessaire) · Page ↓").Split('·')[0].Trim()); row.Children.Add(down);
@@ -447,7 +507,7 @@ public partial class MainWindow : Window
     public void ChangeLevel(int level)
     {
         if (level < -999 || level > 999 || level == Document.ActiveLevel) return;
-        Canvas.CancelGesture(); if (!Canvas.SelectAcrossLevels) Canvas.ClearSelection(); Document.EnsureLevel(level); Document.ActiveLevel = level;
+        Canvas.Feedback.Clear(); Canvas.CancelGesture(); if (!Canvas.SelectAcrossLevels) Canvas.ClearSelection(); Document.EnsureLevel(level); Document.ActiveLevel = level;
         Canvas.RefreshGeometry(); UpdateInspector(); UpdateStatus(); Canvas.Focus();
     }
     public void ChangeAdjacentLevel(int direction)
@@ -464,7 +524,8 @@ public partial class MainWindow : Window
     public void MoveSelection(double x, double y)
     {
         if ((Canvas.SelectionPoints().Count + Canvas.SelectedAnnotations.Count == 0) || (x == 0 && y == 0)) return;
-        TransformSelection(p => p + new V2(x, y));
+        var origin = Canvas.CaptureMoveFeedback();
+        if (TransformSelection(p => p + new V2(x, y))) Canvas.FinishMoveFeedback(origin);
     }
     public void GroupSelection()
     {
@@ -497,6 +558,7 @@ public partial class MainWindow : Window
 
     public void Escape()
     {
+        if (rts?.CancelPing() == true) return;
         Canvas.CancelGesture(); Canvas.ClearSelection();
         SetTool(EditorTool.Select);
     }
@@ -506,27 +568,69 @@ public partial class MainWindow : Window
         if (NumericExpression.TryEvaluate(box.Text, out n) && Math.Abs(n) <= 1e8) { if (!double.TryParse(box.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out _)) box.Text = n.ToString("G15", CultureInfo.InvariantCulture); return true; }
         Notify(L.T("Saisissez une coordonnée numérique valide.")); box.Focus(); box.SelectAll(); return false;
     }
-    public void Mutate(Action action) { CloseColorPicker(false); Canvas.Anchor = null; var before = Document.Serialize(); action(); Commit(before); }
-    public void Commit(string before)
+    public void Mutate(Action action, bool createsObjects = false, bool createsFaces = false)
     {
         CloseColorPicker(false);
-        if (before != Document.Serialize()) History.Push(before);
-        Canvas.RefreshGeometry(); UpdateInspector(); UpdateStatus();
+        Canvas.Anchor = null;
+        var before = PlanSnapshot.Capture(Document);
+        int objects = Document.Annotations.Count + Document.Edges.Count + Document.Vertices.Count;
+        action();
+        Commit(before, createsFaces, createsObjects && Document.Annotations.Count + Document.Edges.Count + Document.Vertices.Count > objects);
     }
-    private bool Dirty => saved != Document.Serialize();
+    public void Commit(string before, bool createsFaces = false, bool createdObject = false) =>
+        Commit(PlanSnapshot.Capture(Plan.Parse(before)), createsFaces, createdObject);
+
+    internal void Commit(PlanSnapshot before, bool createsFaces = false, bool createdObject = false)
+    {
+        CloseColorPicker(false);
+        bool changed = before != PlanSnapshot.Capture(Document);
+        int previousFaces = Canvas.ClosedFaceCount;
+        if (changed) History.Push(before);
+        Canvas.RefreshGeometry();
+        if (changed)
+        {
+            rts?.InvalidateMapGeometry();
+            if (Progress.CreationXp < 20 && (createdObject || (createsFaces && Canvas.ClosedFaceCount > previousFaces)))
+                ApplyProgress(Progress with { CreationXp = Progress.CreationXp + 1 });
+        }
+        UpdateInspector(); UpdateStatus();
+    }
+    private bool Dirty => saved != PlanSnapshot.Capture(Document);
     private void UpdateTitle() => Title = AppVersion.Title + " — " + (string.IsNullOrEmpty(file) ? L.T("Sans titre") : Path.GetFileName(file)) + (Dirty ? " *" : "");
     public void UpdateStatus(V2? p = null)
     {
-        statusLeft.Text = L.T("Édition → Préférences : raccourcis clavier"); statusRight.Text = (p != null ? L.F($"X {p.Value.X:0.##}   Y {p.Value.Y:0.##}     |     ") : "") + L.F($"Niveau {Document.ActiveLevel}     |     Pas {Document.Grid} u     |     {Canvas.Zoom * 100:0}%");
+        bool focused = Canvas.IsSelectionFocused;
+        if (focusMenu != null) focusMenu.IsChecked = focused;
+        statusLeft.Text = rts?.PendingPing != null ? L.T("Cliquez dans le plan ou la minicarte.") + " · " + L.T("Échap annule la pose")
+            : focused ? L.T("Mode Focus") : L.T("Édition → Préférences : raccourcis clavier");
+        statusRight.Text = (p != null ? L.F($"X {p.Value.X:0.##}   Y {p.Value.Y:0.##}     |     ") : "") + L.F($"Niveau {Document.ActiveLevel}     |     Pas {Document.Grid} u     |     {Canvas.Zoom * 100:0}%");
     }
     public void Notify(string text) { statusLeft.Text = text; }
     private void SetGrid(int step)
     {
-        Document.Grid = step; updating = true; gridChoice.SelectedIndex = Array.IndexOf(steps, step); updating = false; Canvas.InvalidateVisual(); UpdateInspector(); UpdateStatus();
+        Document.Grid = step;
+        SyncGridControl();
+        Canvas.InvalidateVisual();
+        UpdateInspector();
+        UpdateStatus();
+    }
+
+    private void SyncGridControl()
+    {
+        updating = true;
+        gridChoice.SelectedIndex = Array.IndexOf(steps, Document.Grid);
+        updating = false;
     }
     public void Undo() { Canvas.CancelGesture(); var p = History.Undo(Document); if (p != null) ReplaceFromHistory(p); }
     public void Redo() { Canvas.CancelGesture(); var p = History.Redo(Document); if (p != null) ReplaceFromHistory(p); }
-    private void ReplaceFromHistory(Plan p) { Document = p; Canvas.ClearSelection(); Canvas.RefreshGeometry(); SetGrid(p.Grid); }
+    private void ReplaceFromHistory(Plan p)
+    {
+        Canvas.Feedback.Clear();
+        p.Progression = Document.Progression;
+        Document = p;
+        Canvas.ClearSelection(); Canvas.RefreshGeometry(); SetGrid(p.Grid);
+        rts?.InvalidateMapGeometry();
+    }
     public void Duplicate()
     {
         var notes = Document.Annotations.Where(a=>Canvas.SelectedAnnotations.Contains(a.Id)).ToList();
@@ -544,11 +648,13 @@ public partial class MainWindow : Window
             foreach (var face in oldFaces) { var key = string.Join("-", face.Vertices.Select(id => map[id]).Order()); Document.Fills[key] = face.Color; Document.FillPatterns[key] = face.Pattern; if (face.Gradient != null) Document.Gradients[key] = face.Gradient; }
             foreach(var note in notes){var copy=CloneNote(note,Document.NextId++,new V2(Document.Grid,-Document.Grid),note.Level);Document.Annotations.Add(copy);Canvas.SelectedAnnotations.Add(copy.Id);}
             Document.Normalize();
-        });
+        }, createsObjects: true, createsFaces: true);
     }
     private void OnKey(object sender, KeyEventArgs e)
     {
+        focusTextRepeating = e.IsRepeat;
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key == Key.Escape && rts?.CancelPing() == true) { e.Handled = true; return; }
         if (Canvas.IsColorSampling && key == Key.Escape) { Canvas.CancelColorSampling(); e.Handled=true; return; }
         if (e.OriginalSource is TextBox && key != Key.Escape) return;
         var modifiers = Keyboard.Modifiers;
@@ -564,7 +670,10 @@ public partial class MainWindow : Window
             return;
         }
         var binding = new Shortcut(key, modifiers);
-        var command = ShortcutSettings.Actions.FirstOrDefault(a => Shortcuts.Bindings.GetValueOrDefault(a.Label) == binding);
+        var command = ShortcutSettings.Actions.FirstOrDefault(a => !a.IsView3D && Shortcuts.Bindings.GetValueOrDefault(a.Label) == binding);
+        if (command?.Label == ShortcutSettings.FocusAction && UsesDefaultFocusShortcut) return;
+        if (command == null && key == Key.Divide && modifiers == ModifierKeys.None && UsesDefaultFocusShortcut)
+        { if (!e.IsRepeat) Canvas.ToggleSelectionFocus(); e.Handled = true; return; }
         if (command != null && (command.Command.Key == Key.None || command.Label == "Confirmer")) { if (!e.IsRepeat) ExecuteFeature(command.Label); e.Handled = true; return; }
         if (!Shortcuts.Translate(ref key, ref modifiers)) return;
         bool ctrl = (modifiers & ModifierKeys.Control) != 0, shift = (modifiers & ModifierKeys.Shift) != 0;
@@ -600,9 +709,9 @@ public partial class MainWindow : Window
             case Key.W: SetTool(EditorTool.Select); Canvas.SetTransform(TransformKind.Translation); break;
             case Key.S: SetTool(EditorTool.Select); Canvas.SetTransform(TransformKind.Scale); break;
             case Key.T: SetTool(EditorTool.Annotation); break;
-            case Key.P: Canvas.Mode = SelectionMode.Vertex; Canvas.ClearSelection(); SetTool(EditorTool.Select); break;
-            case Key.L: Canvas.Mode = SelectionMode.Edge; Canvas.ClearSelection(); SetTool(EditorTool.Select); break;
-            case Key.F: Canvas.Mode = SelectionMode.Face; Canvas.ClearSelection(); SetTool(EditorTool.Select); break;
+            case Key.P: SetSelectionMode(SelectionMode.Vertex); break;
+            case Key.L: SetSelectionMode(SelectionMode.Edge); break;
+            case Key.F: SetSelectionMode(SelectionMode.Face); break;
             case Key.Escape: if (!e.IsRepeat) Escape(); break;
             case Key.PageUp: ChangeAdjacentLevel(1); break;
             case Key.PageDown: ChangeAdjacentLevel(-1); break;
@@ -630,7 +739,6 @@ public partial class MainWindow : Window
     private void New() { Canvas.CancelGesture(); if (!CheckSave()) return; LoadDocument(new Plan(), ""); }
     private void Open()
     {
-        Canvas.CancelGesture(); if (!CheckSave()) return;
         var dlg = new OpenFileDialog { Filter = L.T("Plan Coat (*.coat)|*.coat"), Title = L.T("Ouvrir un plan") };
         if (dlg.ShowDialog(this) == true) OpenPath(dlg.FileName);
     }
@@ -638,17 +746,65 @@ public partial class MainWindow : Window
     {
         try
         {
-            if (new FileInfo(path).Length > 70 * 1024 * 1024) throw new InvalidDataException(L.T("Ce plan dépasse la limite de 70 Mo."));
-            var plan = Plan.Parse(File.ReadAllText(path)); if (plan.Background != null) EditorCanvas.DecodeImage(plan.Background.Data);
-            LoadDocument(plan, path); RememberRecent(path);
+            path = Path.GetFullPath(path);
+            var info = new FileInfo(path);
+            var version = (info.Length, info.LastWriteTimeUtc);
+            if (string.Equals(file, path, StringComparison.OrdinalIgnoreCase) && openFileVersion == version)
+                return;
+
+            Canvas.CancelGesture();
+            CloseColorPicker(false);
+            if (!TestMode && !CheckSave()) return;
+            info.Refresh();
+            version = (info.Length, info.LastWriteTimeUtc);
+            if (version.Length > 70 * 1024 * 1024) throw new InvalidDataException(L.T("Ce plan dépasse la limite de 70 Mo."));
+            var plan = Plan.Parse(File.ReadAllText(path));
+            var image = Canvas.ReadReference(plan.Background?.Data);
+            LoadDocument(plan, path, image);
+            openFileVersion = version;
+            RememberRecent(path);
         }
         catch (Exception ex) { Error(L.T("Impossible d’ouvrir le plan"), ex); }
     }
-    public void LoadDocument(Plan plan, string path)
+    public void LoadDocument(Plan plan, string path) => LoadDocument(plan, path, Canvas.ReadReference(plan.Background?.Data));
+
+    private void LoadDocument(Plan plan, string path, BitmapImage? image)
     {
-        Canvas.CancelGesture(); Canvas.ResetGroupSelectionMode(); Document = plan; file = path; saved = plan.Serialize(); History.Clear(); Canvas.ClearSelection(); Canvas.Center = new V2(plan.ViewX, plan.ViewY); Canvas.Zoom = plan.Zoom; RestoreView(); Canvas.RefreshGeometry(); SetGrid(plan.Grid); UpdateInspector(); UpdateStatus();
+        Canvas.Feedback.Clear();
+        Canvas.CancelGesture();
+        CloseColorPicker(false);
+        Canvas.ClearSelectionFocus(restoreView: false);
+        Canvas.ResetGroupSelectionMode();
+        Document = plan;
+        file = path;
+        openFileVersion = null;
+        saved = PlanSnapshot.Capture(plan);
+        History.Clear();
+        Canvas.ClearSelection();
+        Canvas.Center = new V2(plan.ViewX, plan.ViewY);
+        Canvas.Zoom = plan.Zoom;
+        RestoreView();
+        Canvas.RefreshGeometry(image);
+        SyncGridControl();
+        rts?.ResetProject();
+        UpdateInspector();
+        UpdateStatus();
     }
-    private void LoadDemo() { Canvas.CancelGesture(); if (!CheckSave()) return; LoadDocument(Plan.Demo(), ""); saved = new Plan().Serialize(); Canvas.Fit(); UpdateTitle(); }
+
+    private void RememberFileVersion()
+    {
+        openFileVersion = null;
+        try
+        {
+            var info = new FileInfo(file);
+            openFileVersion = (info.Length, info.LastWriteTimeUtc);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // A later open can reload the file when its current version is unknown.
+        }
+    }
+    private void LoadDemo() { Canvas.CancelGesture(); if (!CheckSave()) return; LoadDocument(Plan.Demo(), ""); saved = PlanSnapshot.Capture(new Plan()); Canvas.Fit(); UpdateTitle(); }
     public bool Save(bool saveAs = false)
     {
         Canvas.CancelGesture(); string path = file;
@@ -659,8 +815,8 @@ public partial class MainWindow : Window
         }
         try
         {
-            SaveView();
-            WriteAtomic(path, Document.Serialize()); file = path; saved = Document.Serialize(); RememberRecent(path); UpdateInspector(); Notify(L.T("Plan enregistré : ") + Path.GetFileName(path)); return true;
+            SaveProjectTo(path);
+            return true;
         }
         catch (Exception ex) { Error(L.T("Impossible d’enregistrer le plan"), ex); return false; }
     }
@@ -763,6 +919,6 @@ public partial class MainWindow : Window
     {
         var assigned = ShortcutSettings.Actions.Where(a => Shortcuts.Bindings[a.Label].Key != Key.None)
             .Select(a => L.ShortcutLabel(a.Label) + " : " + Shortcuts.Bindings[a.Label]);
-        AppDialog.Show(this, AppVersion.Title + " — Epicteta Lupercal\n\n" + L.T("Choisissez un outil dans la barre supérieure et réglez ses options à droite. Molette : zoom. Clic milieu/droit ou Espace+glisser : déplacer la vue. Ctrl+clic : sélection multiple. Maj+glisser une arête : extrusion.\n\nLes champs numériques acceptent +, -, *, / et les parenthèses. Entrée valide ; les annotations multilignes conservent leurs retours à la ligne.\n\nÉdition → Préférences permet d’attribuer ou de supprimer chaque raccourci. Les nouvelles actions restent non attribuées.\n\nRACCOURCIS ATTRIBUÉS") + "\n" + string.Join("\n", assigned), L.T("Prise en main de Coat"), MessageBoxButton.OK, MessageBoxImage.Information);
+        AppDialog.Show(this, AppVersion.Title + " — Epicteta Lupercal\n\n" + L.T("Choisissez un outil dans la barre supérieure et réglez ses options à droite. Molette : zoom. Clic milieu/droit ou Espace+glisser : déplacer la vue. Ctrl+clic : sélection multiple. Maj+glisser une arête : extrusion.\n\nLes champs numériques acceptent +, -, *, / et les parenthèses. Entrée valide ; les annotations multilignes conservent leurs retours à la ligne.\n\nÉdition → Préférences permet d’attribuer ou de supprimer chaque raccourci.\n\nRACCOURCIS ATTRIBUÉS") + "\n" + string.Join("\n", assigned), L.T("Prise en main de Coat"), MessageBoxButton.OK, MessageBoxImage.Information);
     }
 }

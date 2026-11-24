@@ -5,7 +5,7 @@ using System.Windows.Input;
 namespace Coat;
 public partial class EditorCanvas
 {
-    private bool CanSelectAnnotation(Annotation note) => note.Level <= Plan.ActiveLevel && CanSelectLevel(note.Level);
+    private bool CanSelectAnnotation(Annotation note) => note.Level <= Plan.ActiveLevel && CanSelectLevel(note.Level) && FocusIncludesAnnotation(note);
     internal Rect AnnotationScreenBounds(Annotation note)
     {
         var bounds = note.WorldBounds();

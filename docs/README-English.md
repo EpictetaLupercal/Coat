@@ -6,6 +6,16 @@ Extract the entire ZIP, then open **Coat.exe**. Keep the executable, DLL, and JS
 
 Coat requires **Windows 10 or 11 and [.NET Desktop Runtime 8 (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)**. On the download page, choose **.NET Desktop Runtime → Windows → x64**. The runtime is not bundled. No Coat installer or account is required. Once the runtime is installed, Coat works offline.
 
+## Minimap and project HUD
+
+Click the minimap to center the camera, or drag its viewport frame to pan at the current zoom. A small arrow points toward the camera if its center leaves the minimap. Click the top diamond button to collapse or expand it.
+
+Choose a ping below the minimap, then click either view. Press Esc to cancel placement, click an existing ping to center the camera, or right-click to pin it. Pinned markers stay with the project. Right-click a marker to change its label or hex color. Ping bindings start unassigned, and the ping sound is configurable under **Options → Editor Sounds**.
+
+Hover over the XP gauge for exact values. The flag button opens the project quests, including manual confirmation of a route playtest after the first export.
+
+The status bar reports displayed FPS for Coat using the bundled [PresentMon 2.6.0](https://github.com/GameTechDev/PresentMon/releases/tag/v2.6.0) console utility. Windows must allow graphics tracing for the current account. If tracing is unavailable, the status bar displays `— FPS`. The third-party license is in `third-party/PresentMon/LICENSE.txt`.
+
 ## Lua plugins
 
 Use **Plugins → Open Plugin Folder…** to add Lua scripts. Reopen the menu and select an extension to view its source or run it. [Lua plugin guide](LUA-PLUGINS.md)

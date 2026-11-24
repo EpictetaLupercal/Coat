@@ -36,7 +36,7 @@ public partial class MainWindow
     internal Popup? ColorPopup => colorPopup;
     internal ColorPicker? ActiveColorPicker { get; private set; }
     private Plan? colorDocument;
-    private string? colorBefore;
+    private PlanSnapshot? colorBefore;
     private bool suspendColorPopup,closingColorPopup,refreshColorPopup=true;
     private Button ColorButton(Func<string> current,Action<string> apply,string label="◉  Roue de couleurs…")
     {
@@ -49,7 +49,7 @@ public partial class MainWindow
     internal void ShowColorPopup(ColorPicker picker,FrameworkElement anchor,Action<string>? apply=null)
     {
         CloseColorPicker(false);Canvas.Anchor=null;
-        ActiveColorPicker=picker;colorDocument=Document;colorBefore=Document.Serialize();
+        ActiveColorPicker=picker;colorDocument=Document;colorBefore=PlanSnapshot.Capture(Document);
         var popup=new Popup {PlacementTarget=anchor,Placement=PlacementMode.Left,HorizontalOffset=-8,AllowsTransparency=true,StaysOpen=true};
         // A swatch context menu owns a separate HWND. Native popup capture would
         // dismiss the color editor as soon as that menu opens.
@@ -84,7 +84,7 @@ public partial class MainWindow
         var before=colorBefore;var document=colorDocument;
         PreviewMouseDown -= OutsideColorClick; Deactivated -= CloseInactiveColorPopup;
         colorPopup=null;ActiveColorPicker=null;colorBefore=null;colorDocument=null;popup.Child=null;
-        if(before!=null&&document==Document&&before!=Document.Serialize())History.Push(before);
+        if(before!=null&&document==Document&&before!=PlanSnapshot.Capture(Document))History.Push(before.Value);
         if(refresh){UpdateInspector();UpdateStatus();}else UpdateTitle();
     }
     internal void BeginColorSampling(ColorPicker picker)

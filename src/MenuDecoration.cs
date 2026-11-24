@@ -23,6 +23,7 @@ internal sealed class MenuDecoration : Grid
     private readonly TranslateTransform drift = new();
     private readonly DependencyProperty axis;
     private readonly DoubleAnimation animation;
+    private AnimationClock? motionClock;
     private Window? owner;
     internal MenuSurface Surface { get; }
     internal double Offset => (double)drift.GetValue(axis);
@@ -123,6 +124,15 @@ internal sealed class MenuDecoration : Grid
 
     private void SetMotion(bool animate)
     {
-        if (animate != IsAnimating) drift.BeginAnimation(axis, animate ? animation : null);
+        if (animate == IsAnimating) return;
+        motionClock = animate ? (AnimationClock)animation.CreateClock(true) : null;
+        drift.ApplyAnimationClock(axis, motionClock);
+    }
+
+    internal void PauseForPan(bool paused)
+    {
+        if (motionClock?.Controller is not { } controller) return;
+        if (paused) controller.Pause();
+        else controller.Resume();
     }
 }

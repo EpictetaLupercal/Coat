@@ -11,9 +11,20 @@ internal static class Program
     [STAThread]
     static void Main(string[] args)
     {
-        string source = File.ReadAllText(args[0]);
         string output = Path.GetFullPath(args[1]); Directory.CreateDirectory(output);
+        if (args.Length == 4 && args[2] == "--lifecycle")
+        {
+            LifecycleProbe.Run(args[0], args[3], output);
+            return;
+        }
+        string source = File.ReadAllText(args[0]);
         var input = Plan.Parse(source);
+        if (args.Contains("--navigation-ab") || args.Contains("--zoom-ab"))
+        {
+            var helper = args.Skip(2).FirstOrDefault(arg => !arg.StartsWith("--", StringComparison.Ordinal));
+            NavigationProbe.Run(input, output, helper == null ? null : Path.GetFullPath(helper), args.Contains("--static-menus"), args.Contains("--images-only"), args.Contains("--zoom-ab"));
+            return;
+        }
         if (args.Contains("--navigation")) { Navigation(input, output, args.Contains("--stress")); return; }
         var measurements = new Dictionary<string, double[]>();
         var operations = new Dictionary<string, Action<Plan>>

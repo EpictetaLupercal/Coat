@@ -91,7 +91,7 @@ public partial class EditorCanvas
     private bool TryBeginScaleHandle()
     {
         var handle = HitScaleHandle(); if (handle == null) return false;
-        before = Plan.Serialize(); BeginTransformDrag(); scaleHandle = (handle.Value.X, handle.Value.Y);
+        before = PlanSnapshot.Capture(Plan); BeginTransformDrag(); scaleHandle = (handle.Value.X, handle.Value.Y);
         var points = original.Values; double minX = points.Min(p => p.X), maxX = points.Max(p => p.X), minY = points.Min(p => p.Y), maxY = points.Max(p => p.Y);
         transformPivot = new(handle.Value.X < 0 ? maxX : handle.Value.X > 0 ? minX : (minX + maxX) / 2, handle.Value.Y < 0 ? maxY : handle.Value.Y > 0 ? minY : (minY + maxY) / 2);
         scaleReference = new(handle.Value.X * Math.Max(maxX - minX, 44 / Zoom), handle.Value.Y * Math.Max(maxY - minY, 44 / Zoom)); scaleFactorX = scaleFactorY = 1;
@@ -122,19 +122,54 @@ public partial class EditorCanvas
     {
         if (Tool == EditorTool.Select && !HasSelectionOrGesture)
         {
-            if (Mode == SelectionMode.Vertex && HitVertex(position) is { } vertex) SelectHit(vertex.Id, null, null, false);
+            if (Plan.Annotations.LastOrDefault(note => CanSelectAnnotation(note) && note.Contains(position)) is { } annotation)
+            {
+                SelectedAnnotations.Add(annotation.Id);
+                Transform = TransformKind.Translation;
+            }
+            else if (Mode == SelectionMode.Vertex && HitVertex(position) is { } vertex) SelectHit(vertex.Id, null, null, false);
             else if (Mode == SelectionMode.Edge && HitEdge(position) is { } edge) SelectHit(null, edge.Id, null, false);
             else if (Mode == SelectionMode.Face && HitFace(position) is { } face) SelectHit(null, null, face, false);
             Host.UpdateInspector(); InvalidateVisual();
         }
         var menu = new ContextMenu { Resources = Host.Resources, BorderBrush = Brushes.LightGray, Background = Brushes.White, Foreground = Brushes.Black };
-        void Item(string name, Action action, bool enabled)
-        { var item = new MenuItem { Header = L.T(name), IsEnabled = enabled }; if (Host.Shortcuts.Bindings.TryGetValue(name, out var key) && key.Key != Key.None) item.InputGestureText = key.ToString(); item.Click += (_, _) => action(); menu.Items.Add(item); }
-        bool selected = SelectionPoints().Count > 0 || SelectedAnnotations.Count > 0;
+        void Item(string name, Action action, bool enabled, string? shortcut = null)
+        {
+            var item = new MenuItem { Header = L.T(name), IsEnabled = enabled };
+            if (Host.Shortcuts.Bindings.TryGetValue(shortcut ?? name, out var key) && key.Key != Key.None) item.InputGestureText = key.ToString();
+            item.Click += (_, _) => action();
+            menu.Items.Add(item);
+        }
+        var points = SelectionPoints();
+        bool selected = points.Count > 0 || SelectedAnnotations.Count > 0;
         Item("Dissoudre les sommets", () => DissolveSelection(true), Tool == EditorTool.Select && SelectedVertices.Count > 0 && SelectedAnnotations.Count == 0);
         Item("Dissoudre les arêtes", () => DissolveSelection(false), Tool == EditorTool.Select && SelectionEdges().Count > 0 && SelectedAnnotations.Count == 0);
-        menu.Items.Add(new Separator()); Item("Supprimer", DeleteSelection, selected); Item("Dupliquer", Host.Duplicate, selected);
+        menu.Items.Add(new Separator());
+        Item("Grouper", Host.GroupSelection, points.Count > 0);
+        Item("Dissocier", Host.UngroupSelection, points.Count > 0 && Plan.MatchingGroups(SelectedVertices, SelectionEdges()).Count > 0);
+        var move = new MenuItem { Header = L.T("Déplacer vers le niveau"), IsEnabled = selected };
+        menu.Items.Add(move);
+        var sourceLevels = points.Select(id => VertexAt(id).Level)
+            .Concat(Plan.Annotations.Where(note => SelectedAnnotations.Contains(note.Id)).Select(note => note.Level)).ToHashSet();
+        foreach (int level in Plan.Levels.Order()) AddLevel(L.T("Niveau ") + level, level);
+        if (Plan.Levels.Max() < 999)
+        {
+            move.Items.Add(new Separator());
+            AddLevel(L.T("Nouveau niveau"), Plan.Levels.Max() + 1);
+        }
+        Item(IsSelectionFocused ? "Quitter le mode Focus" : "Isoler la sélection", ToggleSelectionFocus, selected || IsSelectionFocused, ShortcutSettings.FocusAction);
+        Item("Miroir", () => Host.SetTool(EditorTool.Mirror), selected);
+        menu.Items.Add(new Separator());
+        Item("Dupliquer", Host.Duplicate, selected);
+        Item("Supprimer", DeleteSelection, selected);
         return menu;
+
+        void AddLevel(string title, int level)
+        {
+            var item = new MenuItem { Header = title, IsEnabled = selected && (sourceLevels.Count != 1 || !sourceLevels.Contains(level)) };
+            item.Click += (_, _) => Host.AssignSelectionToLevel(level);
+            move.Items.Add(item);
+        }
     }
     private void OpenSelectionMenu(V2 position) { var menu = BuildSelectionMenu(position); menu.PlacementTarget = this; menu.IsOpen = true; }
     internal void DissolveSelection(bool vertices)

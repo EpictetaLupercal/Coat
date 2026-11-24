@@ -41,6 +41,8 @@ public class Annotation
         return LocalBounds(12).Contains(new Point(local.X,-local.Y));
     }
     public bool IsToken { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public PingKind? Ping { get; set; }
     public TokenKind TokenShape { get; set; }
     public string Text { get; set; } = "Annotation";
     public string Color { get; set; } = "#FFFFFF";
@@ -89,23 +91,25 @@ public partial class EditorCanvas
     };
     private bool AnnotationDown(V2 point, bool ctrl)
     {
-        var hit = Plan.Annotations.LastOrDefault(a => (Tool == EditorTool.Select ? CanSelectAnnotation(a) : a.Level == Plan.ActiveLevel) && a.Contains(point));
+        var hit = Plan.Annotations.LastOrDefault(a => FocusIncludesAnnotation(a) && (Tool == EditorTool.Select ? CanSelectAnnotation(a) : a.Level == Plan.ActiveLevel) && a.Contains(point));
         if (Tool == EditorTool.Erase && hit != null) { Host.Mutate(() => Plan.Annotations.Remove(hit)); return true; }
         if (Tool is EditorTool.Annotation or EditorTool.Token && hit != null && hit.IsToken != (Tool == EditorTool.Token)) hit = null;
         if (Tool is not (EditorTool.Annotation or EditorTool.Token) && (Tool != EditorTool.Select || hit == null)) return false;
         if (Tool == EditorTool.Select && ctrl && hit != null)
         {
-            if(!SelectedAnnotations.Add(hit.Id))SelectedAnnotations.Remove(hit.Id);
+            if (!SelectedAnnotations.Add(hit.Id)) SelectedAnnotations.Remove(hit.Id);
+            else Host.PlayEditorSound(EditorSoundCue.Selection);
             Host.UpdateInspector();InvalidateVisual();return true;
         }
         if(Tool != EditorTool.Select || hit == null || !SelectedAnnotations.Contains(hit.Id))ClearSelection();
         if (hit == null)
         {
             var p = SnapAnnotation(point);
-            Host.Mutate(() => { hit = new Annotation { Id = Plan.NextId++, X = p.X, Y = p.Y, Level = Plan.ActiveLevel, IsToken = Tool == EditorTool.Token, TokenShape = TokenShape, Color = PaintColor, Size = Tool == EditorTool.Token ? TokenSize : 18 }; Plan.Annotations.Add(hit); });
+            Host.Mutate(() => { hit = new Annotation { Id = Plan.NextId++, X = p.X, Y = p.Y, Level = Plan.ActiveLevel, IsToken = Tool == EditorTool.Token, TokenShape = TokenShape, Color = PaintColor, Size = Tool == EditorTool.Token ? TokenSize : 18 }; Plan.Annotations.Add(hit); }, createsObjects: true);
             if (hit!.IsToken) { Host.UpdateInspector(); InvalidateVisual(); return true; }
         }
-        SelectedAnnotations.Add(hit!.Id); if (Tool != EditorTool.Select) Transform = TransformKind.Translation; before = Plan.Serialize(); BeginTransformDrag(); CaptureMouse(); Host.UpdateInspector(); InvalidateVisual(); return true;
+        if (SelectedAnnotations.Add(hit!.Id) && Tool == EditorTool.Select) Host.PlayEditorSound(EditorSoundCue.Selection);
+        if (Tool != EditorTool.Select) Transform = TransformKind.Translation; before = PlanSnapshot.Capture(Plan); BeginTransformDrag(); CaptureMouse(); Host.UpdateInspector(); InvalidateVisual(); return true;
     }
     public Brush DecorationBrush(string color, FillPattern pattern)
     {
@@ -123,7 +127,7 @@ public partial class EditorCanvas
     }
     private void DrawAnnotations(DrawingContext dc, int level)
     {
-        foreach (var note in Plan.Annotations.Where(a => a.Level == level))
+        foreach (var note in Plan.Annotations.Where(a => a.Level == level && FocusIncludesAnnotation(a)))
         {
             var p = Screen(new(note.X, note.Y)); var text = note.Layout(VisualTreeHelper.GetDpi(this).PixelsPerDip);
             dc.PushTransform(new TranslateTransform(p.X, p.Y)); dc.PushTransform(new ScaleTransform(Zoom, Zoom));

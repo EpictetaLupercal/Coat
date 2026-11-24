@@ -102,8 +102,12 @@ public partial class EditorCanvas
         if (shapeStart == null) return;
         var lines = StairPreview(shapeStart.Value, end); if (lines.Count == 0) return;
         if (lines.Any(l => Math.Abs(l.A.X) > 1e8 || Math.Abs(l.A.Y) > 1e8 || Math.Abs(l.B.X) > 1e8 || Math.Abs(l.B.Y) > 1e8)) { Host.Notify(L.T("L’escalier dépasse les limites du plan.")); return; }
+        var previous = SnapshotFeedbackFaces();
+        GeometryGroup? created = null;
         shapeStart = null; shaping = false; ReleaseMouseCapture();
-        Host.Mutate(() => { var group = Plan.AddStair(lines, Stair); ClearSelection(); SelectedEdges.UnionWith(group.EdgeIds); });
+        Host.Mutate(() => { created = Plan.AddStair(lines, Stair); ClearSelection(); SelectedEdges.UnionWith(created.EdgeIds); }, createsFaces: true, createsObjects: true);
+        Host.PlayEditorSound(EditorSoundCue.Drawing);
+        if (created != null) StairFeedback(previous, lines, created);
     }
     private void DrawStairPreview(DrawingContext dc)
     {
@@ -118,34 +122,15 @@ public partial class MainWindow
 {
     private void StairInspector()
     {
-        var choice = new ComboBox { Margin = new Thickness(0, 0, 0, 12), SelectedIndex = (int)Canvas.Stair };
-        foreach (string name in new[] { L.T("Droits"), L.T("En L"), L.T("En U"), L.T("En colimaçon") }) choice.Items.Add(name);
-        choice.SelectedIndex = (int)Canvas.Stair;
-        System.Windows.Automation.AutomationProperties.SetName(choice, L.T("Type d’escalier"));
-        choice.SelectionChanged += (_, _) => { if (choice.SelectedIndex >= 0) { Canvas.CancelGesture(); Canvas.Stair = (StairKind)choice.SelectedIndex; UpdateInspector(); Canvas.Focus(); } }; inspector.Children.Add(choice);
-        var steps = Field(L.T("Marches"), Canvas.StairSteps.ToString(CultureInfo.InvariantCulture));
-        steps.TextChanged += (_, _) => { if (int.TryParse(steps.Text, out int n) && n >= 2 && n <= 128) { Canvas.StairSteps = n; Canvas.InvalidateVisual(); } };
-        steps.LostKeyboardFocus += (_, _) => { if (!int.TryParse(steps.Text, out int n) || n < 2 || n > 128) { steps.Text = Canvas.StairSteps.ToString(CultureInfo.InvariantCulture); Notify(L.T("Choisissez entre 2 et 128 marches au total.")); } };
-        AddStepper(steps, L.T("Marches"), 2, 128, () => Canvas.StairSteps, integer: true);
         if (Canvas.Stair == StairKind.Spiral)
-        {
-            StairField("Angle (°)", Canvas.StairAngle, 15, 360, value => Canvas.StairAngle = value);
             ToolHint(L.T("Placez le centre, puis glissez vers le rayon extérieur. L’angle définit l’ouverture de 15° à 360°. Les marches tournent autour d’un vide central."));
-        }
         else
         {
-            StairField(L.T("Largeur (u)"), Canvas.StairWidth, 1, 100000, value => Canvas.StairWidth = value);
+            var width = Field(L.T("Largeur (u)"), F(Canvas.StairWidth));
+            ConfigureLiveNumber(width, L.T("Largeur (u)"), Canvas.StairWidth, 1, 100000, value => Canvas.StairWidth = value);
             ToolHint(L.T("Placez le milieu de l’entrée, puis glissez dans le sens de montée. L’axe dominant de la souris oriente l’escalier. La distance règle la longueur cumulée des volées, hors palier."));
         }
         if (Canvas.Stair != StairKind.Straight) ModeButtons(new[] { L.T("Tourne à gauche"), L.T("Tourne à droite") }, Canvas.StairRight ? 1 : 0, i => { Canvas.StairRight = i == 1; Canvas.InvalidateVisual(); UpdateInspector(); });
         ToolHint(L.T("2 à 128 marches au total ; les paliers ne comptent pas comme marches. Contours continus, marches en tirets longs. L’ensemble est regroupé pour le déplacer et le transformer."));
-    }
-    private void StairField(string title, double current, double minimum, double maximum, Action<double> assign)
-    {
-        var field = Field(title, F(current)); double last = current;
-        bool Valid(out double value) => double.TryParse(field.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value) && double.IsFinite(value) && value >= minimum && value <= maximum;
-        field.TextChanged += (_, _) => { if (Valid(out double value)) { last = value; assign(value); Canvas.InvalidateVisual(); } };
-        field.LostKeyboardFocus += (_, _) => { if (!Valid(out _)) { field.Text = F(last); Notify(L.F($"{title} : entre {minimum} et {maximum}.")); } };
-        AddStepper(field, title, minimum, maximum, () => last);
     }
 }

@@ -1,4 +1,12 @@
-# Coat 1.3.4
+# Coat
+
+## Minicarte et progression
+
+Cliquez sur la minicarte pour centrer la caméra ou glissez son cadre pour déplacer la vue sans changer le zoom. Le losange au sommet permet de replier et de rouvrir la carte.
+
+Choisissez un ping et cliquez dans le plan ou la minicarte. Échap annule la pose. Faites un clic droit sur un ping pour l’épingler, puis sur le marqueur pour modifier sa couleur ou son libellé.
+
+Survolez la jauge d’XP pour lire les valeurs exactes. Le drapeau ouvre les quêtes et permet de confirmer le test d’un parcours après le premier export.
 
 ## Plugins Lua
 
